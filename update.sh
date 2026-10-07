@@ -7,6 +7,12 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 echo "⬇️  Récupération de la dernière version…"
+# Une frappe accidentelle dans Xcode suffit à casser le build ou à bloquer la mise à jour :
+# le code de GitHub fait foi. Les modifications locales sont mises de côté (git stash list).
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "   Modifications locales mises de côté : $(git diff --name-only HEAD | tr '\n' ' ')"
+  git stash push --quiet -m "update.sh $(date '+%Y-%m-%d %H:%M')"
+fi
 git pull --ff-only --quiet
 echo "   $(git log -1 --format='%h · %s')"
 
