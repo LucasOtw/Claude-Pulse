@@ -48,7 +48,6 @@ struct SettingsView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
         .tint(PulseStyle.accent)
     }
 
@@ -68,7 +67,7 @@ struct SettingsView: View {
             }
         } label: {
             Label(title, systemImage: symbol)
-                .foregroundStyle(.white)
+                .foregroundStyle(PulseStyle.textPrimary)
         }
     }
 }

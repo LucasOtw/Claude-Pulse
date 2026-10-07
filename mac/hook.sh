@@ -15,8 +15,10 @@ input=$(cat)
 event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null)
 [ -n "$event" ] || exit 0
 
-# PreToolUse arrive à chaque outil : on n'envoie qu'un battement toutes les
-# PULSE_HEARTBEAT secondes, sauf pour les outils qui changent la progression.
+# PreToolUse arrive à chaque outil. Pour ménager le quota gratuit, on envoie :
+#  - toujours les outils qui changent la progression (TodoWrite, Agent, Workflow) ;
+#  - dès que Claude change d'outil (au plus toutes les 5 s) ;
+#  - sinon un battement toutes les PULSE_HEARTBEAT secondes.
 if [ "$event" = "PreToolUse" ]; then
   tool=$(printf '%s' "$input" | jq -r '.tool_name // empty')
   case "$tool" in
@@ -25,9 +27,12 @@ if [ "$event" = "PreToolUse" ]; then
       sid=$(printf '%s' "$input" | jq -r '.session_id // "x"' | tr -cd 'A-Za-z0-9_-')
       stamp="${TMPDIR:-/tmp}/claude-pulse-hb-$sid"
       now=$(date +%s)
-      last=$(cat "$stamp" 2>/dev/null || echo 0)
-      [ $((now - last)) -ge "${PULSE_HEARTBEAT:-30}" ] || exit 0
-      echo "$now" > "$stamp"
+      { read -r last last_tool < "$stamp"; } 2>/dev/null || { last=0; last_tool=""; }
+      elapsed=$((now - ${last:-0}))
+      if [ "$elapsed" -lt "${PULSE_HEARTBEAT:-30}" ]; then
+        [ "$tool" != "$last_tool" ] && [ "$elapsed" -ge 5 ] || exit 0
+      fi
+      echo "$now $tool" > "$stamp"
       ;;
   esac
 fi
@@ -47,6 +52,18 @@ payload=$(printf '%s' "$input" | jq -c '
     project: (.cwd // "" | split("/") | last),
     title: (.session_title // null | cut(60)),
     tool: (.tool_name // null),
+    # Précision affichée sur le téléphone : nom du fichier (pas son chemin), description courte
+    # que Claude donne à sa commande ou à son sous-agent, domaine de la page web lue.
+    detail: (
+      if (.tool_name | IN("Edit", "MultiEdit", "Write", "Read", "NotebookEdit"))
+        then ((.tool_input.file_path // .tool_input.notebook_path // "") | split("/") | last)
+      elif (.tool_name | IN("Bash", "Agent", "Task")) then .tool_input.description
+      elif .tool_name == "WebFetch"
+        then ([(.tool_input.url // "") | capture("^[a-z]+://(?<h>[^/]+)") | .h] | first)
+      elif .tool_name == "Skill" then (.tool_input.skill // .tool_input.name)
+      else null end
+      | if type == "string" and length > 0 then .[0:80] else null end
+    ),
     agentId: (.agent_id // null),
     agentType: (.agent_type // null),
     ntype: (.notification_type // null),

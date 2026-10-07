@@ -36,7 +36,7 @@ struct ContentView: View {
                         SectionTitle(title: "Récemment", count: nil)
                         VStack(spacing: 0) {
                             ForEach(Array(recent.enumerated()), id: \.element.id) { index, session in
-                                if index > 0 { Divider().overlay(PulseStyle.stroke).padding(.leading, 54) }
+                                if index > 0 { Divider().padding(.leading, 56) }
                                 RecentRow(session: session)
                             }
                         }
@@ -71,7 +71,6 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
         }
-        .preferredColorScheme(.dark)
         .tint(PulseStyle.accent)
     }
 }
@@ -91,7 +90,7 @@ struct UsageHero: View {
                 VStack(spacing: 0) {
                     Text(five.map { "\(Int($0.pct.rounded()))" } ?? "—")
                         .font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(PulseStyle.textPrimary)
                         .contentTransition(.numericText())
                     Text(five == nil ? "Pro / Max" : "% · 5 h")
                         .font(.caption.weight(.semibold))
@@ -101,7 +100,7 @@ struct UsageHero: View {
             .frame(width: 128, height: 128)
 
             VStack(alignment: .leading, spacing: 14) {
-                HeroStat(label: "Réinitialisation 5 h", value: five.map { PulseStyle.resetTime($0.resetDate) } ?? "—")
+                HeroStat(label: "Remise à zéro 5 h", value: five.map { PulseStyle.resetTime($0.resetDate) } ?? "—")
 
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -115,16 +114,13 @@ struct UsageHero: View {
                     }
                     LimitBar(pct: seven?.pct, height: 8)
                     if let seven {
-                        Text("réinit. \(PulseStyle.resetTime(seven.resetDate))")
+                        Text("remise à zéro \(PulseStyle.resetTime(seven.resetDate))")
                             .font(.caption2)
                             .foregroundStyle(PulseStyle.textTertiary)
                     }
                 }
 
-                HeroStat(
-                    label: "Aujourd'hui",
-                    value: today.map { "\(PulseStyle.cost($0.costUsd)) · \($0.sessions) session\($0.sessions > 1 ? "s" : "")" } ?? "—"
-                )
+                HeroStat(label: "Sessions aujourd'hui", value: today.map { "\($0.sessions)" } ?? "—")
             }
         }
         .padding(18)
@@ -144,7 +140,7 @@ struct HeroStat: View {
                 .foregroundStyle(PulseStyle.textSecondary)
             Text(value)
                 .font(.subheadline.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.white)
+                .foregroundStyle(PulseStyle.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
@@ -168,7 +164,7 @@ struct MonitorCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Surveillance active")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(PulseStyle.textPrimary)
                     if let last = monitor.lastUpdate {
                         Text("Mise à jour \(Text(last, style: .relative))")
                             .font(.caption)
@@ -178,10 +174,10 @@ struct MonitorCard: View {
                 Spacer()
                 Button("Arrêter") { Task { await monitor.stop() } }
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(PulseStyle.textPrimary)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.10), in: Capsule())
+                    .background(PulseStyle.cardRaised, in: Capsule())
             }
             .padding(14)
             .pulseCard()
@@ -195,7 +191,7 @@ struct MonitorCard: View {
                         Text("Lancer la surveillance")
                     }
                     .font(.headline)
-                    .foregroundStyle(.black)
+                    .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 15)
                     .background(
@@ -231,7 +227,7 @@ struct SectionTitle: View {
             if let count {
                 Text("\(count)")
                     .font(.caption2.weight(.bold).monospacedDigit())
-                    .foregroundStyle(.black)
+                    .foregroundStyle(.white)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 1)
                     .background(PulseStyle.accent, in: Capsule())
@@ -246,6 +242,11 @@ struct SectionTitle: View {
 struct SessionCard: View {
     let session: PulseState.Session
 
+    private var estimatedEnd: Date? {
+        guard let eta = session.etaSeconds, eta >= 0 else { return nil }
+        return Date().addingTimeInterval(TimeInterval(eta))
+    }
+
     var body: some View {
         let color = PulseStyle.color(for: session.status)
         VStack(alignment: .leading, spacing: 12) {
@@ -254,7 +255,7 @@ struct SessionCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(session.project)
                         .font(.system(.headline, design: .rounded))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(PulseStyle.textPrimary)
                         .lineLimit(1)
                     if let title = session.title, !title.isEmpty {
                         Text(title)
@@ -271,19 +272,26 @@ struct SessionCard: View {
                         .foregroundStyle(color)
                     Text(Date(timeIntervalSince1970: session.startedAt), style: .timer)
                         .font(.subheadline.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(PulseStyle.textPrimary)
                         .multilineTextAlignment(.trailing)
                         .frame(maxWidth: 80, alignment: .trailing)
                 }
             }
 
-            Text(session.activity)
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.88))
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 4) {
+                if let end = estimatedEnd {
+                    (Text(PulseStyle.remaining(session.etaSeconds ?? 0)).foregroundStyle(PulseStyle.accent)
+                        + Text(" · fin vers \(PulseStyle.clock(end))").foregroundStyle(PulseStyle.textPrimary))
+                        .font(.system(.title3, design: .rounded).weight(.bold))
+                }
+                Text(session.activity)
+                    .font(.subheadline)
+                    .foregroundStyle(PulseStyle.textPrimary.opacity(0.85))
+                    .lineLimit(2)
+            }
 
             if session.stepsTotal > 0 {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 6) {
                         Text("\(min(session.stepsDone + 1, session.stepsTotal))/\(session.stepsTotal)")
                             .font(.caption.weight(.bold).monospacedDigit())
@@ -293,13 +301,12 @@ struct SessionCard: View {
                             .foregroundStyle(PulseStyle.textSecondary)
                             .lineLimit(1)
                     }
-                    ProgressView(value: Double(session.stepsDone), total: Double(session.stepsTotal))
-                        .tint(PulseStyle.accent)
+                    SegmentedBar(done: session.stepsDone, total: session.stepsTotal)
                 }
             }
 
             HStack(spacing: 6) {
-                MetaChip(symbol: "text.alignleft", text: "ctx \(session.contextPct) %")
+                MetaChip(symbol: "text.alignleft", text: "contexte \(session.contextPct) %")
                 if session.agents > 0 {
                     MetaChip(symbol: "person.2.fill", text: "\(session.agents)")
                 }
@@ -326,7 +333,7 @@ struct RecentRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.project)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(PulseStyle.textPrimary)
                     .lineLimit(1)
                 Text(session.title ?? session.activity)
                     .font(.caption)
@@ -337,7 +344,7 @@ struct RecentRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(session.duration)
                     .font(.caption.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(PulseStyle.textPrimary.opacity(0.85))
                 Text(Date(timeIntervalSince1970: session.updatedAt), format: .relative(presentation: .named))
                     .font(.caption2)
                     .foregroundStyle(PulseStyle.textTertiary)
@@ -372,10 +379,10 @@ struct EmptyState: View {
         VStack(spacing: 10) {
             Image(systemName: "waveform.path.ecg")
                 .font(.system(size: 34, weight: .semibold))
-                .foregroundStyle(PulseStyle.accent.opacity(0.8))
+                .foregroundStyle(PulseStyle.accent)
             Text("Aucune session récente")
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(PulseStyle.textPrimary)
             Text("Lance Claude Code sur ton Mac : tes sessions apparaîtront ici.")
                 .font(.subheadline)
                 .foregroundStyle(PulseStyle.textSecondary)
@@ -398,7 +405,7 @@ struct NoticeCard: View {
             Image(systemName: symbol).foregroundStyle(tint)
             Text(text)
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(PulseStyle.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
@@ -407,7 +414,7 @@ struct NoticeCard: View {
 }
 
 extension View {
-    /// Carte sombre aux coins continus, bordure fine (ou colorée pour attirer l'œil).
+    /// Carte aux coins continus, bordure fine (ou colorée pour attirer l'œil). Suit le thème.
     func pulseCard(highlight: Color? = nil) -> some View {
         background(PulseStyle.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(

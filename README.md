@@ -16,7 +16,7 @@ Mac : Claude Code ──hooks + status line──▶ Vercel + Upstash ◀──i
 
 ## Ce qui est envoyé (et ce qui ne l'est pas)
 
-Les scripts du Mac ne transmettent que des **métadonnées** : nom du dossier du projet, type d'événement, nom de l'outil, intitulés des tâches, nom des workflows, coût, % de contexte, % des limites. **Jamais** le texte de tes prompts, les réponses de Claude, les commandes ni le contenu des fichiers. Voir le filtre `jq` dans [`mac/hook.sh`](mac/hook.sh).
+Les scripts du Mac ne transmettent que des **métadonnées** : nom du dossier du projet, type d'événement, nom de l'outil, **nom du fichier** lu ou modifié (sans son chemin), **description courte** que Claude donne à sa commande ou à son sous-agent (« Run backend tests »), domaine d'une page web, intitulés des tâches, nom des workflows, % de contexte, % des limites. **Jamais** le texte de tes prompts, les réponses de Claude, les commandes elles-mêmes ni le contenu des fichiers. Voir le filtre `jq` dans [`mac/hook.sh`](mac/hook.sh).
 
 ## Comment ça marche sans compte développeur
 
@@ -118,7 +118,8 @@ Chaque lecture de l'iPhone coûte 5 commandes Redis, chaque événement du Mac e
 
 - **Phase exacte d'un workflow** : Claude Code n'émet pas d'événement par phase. On affiche le nom du workflow, ses phases déclarées, les sous-agents actifs et le fait qu'il tourne en arrière-plan.
 - **Limites 5 h / 7 jours** : fournies par Claude Code uniquement avec un abonnement Pro / Max, après le premier message d'une session.
-- **Coût** : estimation de Claude Code au prix public de l'API, pas ta facture réelle.
+- **Coût en dollars** : Claude Code calcule ce que ta session coûterait au tarif public de l'API. Avec un abonnement Pro / Max, ce n'est pas ce que tu paies : l'app ne l'affiche donc pas, seules les limites 5 h / 7 jours comptent.
+- **Temps restant** : estimé à partir de la liste de tâches de Claude (durée moyenne des étapes déjà faites × étapes restantes). Il n'apparaît qu'une fois la première étape terminée, et seulement quand Claude a fait une liste.
 - **Widget** : iOS décide de son rythme de rafraîchissement (≈ toutes les 5 à 15 min) ; l'app le force quand un statut change pendant la surveillance.
 
 ## Développement

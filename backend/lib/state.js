@@ -28,7 +28,35 @@ export const SILENT_AFTER_MS = 20 * 60 * 1000;
 const ACTIVE = new Set(['running', 'waiting', 'background']);
 const NEEDS_INPUT = new Set(['permission_prompt', 'elicitation_dialog', 'elicitation_url_dialog', 'agent_needs_input']);
 
-export function toolLabel(tool) {
+export function toolLabel(tool, detail) {
+  const d = typeof detail === 'string' ? detail.trim() : '';
+  switch (tool) {
+    case 'Edit':
+    case 'MultiEdit':
+    case 'NotebookEdit':
+      if (d) return `Modifie ${d}`;
+      break;
+    case 'Write':
+      if (d) return `Écrit ${d}`;
+      break;
+    case 'Read':
+      if (d) return `Lit ${d}`;
+      break;
+    case 'Bash':
+      // Description courte rédigée par Claude pour la commande (« Run backend tests »).
+      if (d) return d.charAt(0).toUpperCase() + d.slice(1);
+      break;
+    case 'Agent':
+    case 'Task':
+      if (d) return `Sous-agent : ${d}`;
+      break;
+    case 'WebFetch':
+      if (d) return `Lit ${d}`;
+      break;
+    case 'Skill':
+      if (d) return `Compétence ${d}`;
+      break;
+  }
   if (!tool) return 'Travaille…';
   if (TOOL_LABELS[tool]) return TOOL_LABELS[tool];
   if (tool.startsWith('mcp__')) return `Utilise ${tool.split('__')[1] ?? 'un outil'}`;
@@ -48,6 +76,7 @@ export function newSession(ev, now) {
     tasks: {}, // id -> { subject, done } issu de TaskCreated / TaskCompleted
     agents: {}, // agentId -> type, sous-agents en cours
     workflow: null, // { name, phases: [] }
+    progressStartedAt: null, // apparition de la liste de tâches du tour, pour estimer le temps restant
     error: null,
     usage: { costUsd: 0, contextPct: 0, model: null },
   };
@@ -66,19 +95,29 @@ export function applyEvent(prev, ev, now) {
       s.status = 'running';
       s.activity = 'Réfléchit…';
       s.error = null;
-      if (!ACTIVE.has(before)) s.turnStartedAt = now;
+      if (!ACTIVE.has(before)) {
+        s.turnStartedAt = now;
+        s.progressStartedAt = null;
+        // Une liste entièrement terminée appartient au tour précédent.
+        if (s.todos && s.todos.done >= s.todos.total) s.todos = null;
+        if (Object.values(s.tasks ?? {}).every((t) => t.done)) s.tasks = {};
+      }
       break;
 
     case 'PreToolUse':
     case 'PostToolUse':
       s.status = 'running';
-      s.activity = toolLabel(ev.tool);
-      if (ev.todos && !ev.agentId) s.todos = summarizeTodos(ev.todos);
+      s.activity = toolLabel(ev.tool, ev.detail);
+      if (ev.todos && !ev.agentId) {
+        s.todos = summarizeTodos(ev.todos);
+        if (!s.progressStartedAt && s.todos.total > 0) s.progressStartedAt = now;
+      }
       if (ev.workflow) s.workflow = ev.workflow;
       break;
 
     case 'TaskCreated':
       if (ev.taskId) s.tasks[ev.taskId] = { subject: ev.taskSubject || '', done: false };
+      if (!s.progressStartedAt) s.progressStartedAt = now;
       break;
 
     case 'TaskCompleted':
@@ -183,8 +222,21 @@ export function snapshot(s) {
     agents: Object.keys(s.agents ?? {}).length,
     workflow: s.workflow?.name ?? '',
     startedAt: Math.floor(s.turnStartedAt / 1000),
+    progressStartedAt: s.progressStartedAt ? Math.floor(s.progressStartedAt / 1000) : null,
     updatedAt: Math.floor(s.updatedAt / 1000),
   };
+}
+
+/**
+ * Temps restant estimé (secondes) : durée moyenne des étapes déjà faites × étapes restantes.
+ * -1 tant qu'aucune étape n'est terminée ou que la tâche n'est pas en cours.
+ */
+export function estimateRemaining(snap, status, now) {
+  const { stepsDone: done, stepsTotal: total } = snap;
+  if (!ACTIVE.has(status) || !(done > 0) || done >= total) return -1;
+  const since = (snap.progressStartedAt ?? snap.startedAt) * 1000;
+  const perStep = (now - since) / done;
+  return Math.max(0, Math.round((perStep * (total - done)) / 1000));
 }
 
 /**
@@ -199,8 +251,9 @@ export function publicSession(snap, usage, now) {
     activity = 'Plus de nouvelles (interrompu ?)';
   }
   const end = ACTIVE.has(status) ? now : snap.updatedAt * 1000;
+  const { progressStartedAt, ...rest } = snap;
   return {
-    ...snap,
+    ...rest,
     title: snap.title || usage?.title || null,
     status,
     activity,
@@ -208,6 +261,7 @@ export function publicSession(snap, usage, now) {
     contextPct: Math.round(usage?.contextPct ?? 0),
     model: usage?.model ?? null,
     duration: formatDuration(end - snap.startedAt * 1000),
+    etaSeconds: estimateRemaining(snap, status, now),
   };
 }
 

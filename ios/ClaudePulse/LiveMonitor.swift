@@ -156,7 +156,7 @@ final class LiveMonitor: ObservableObject {
                 guard let previous, ["running", "waiting", "background"].contains(previous),
                       s.updatedAt - s.startedAt >= 30 else { continue }
                 if s.status == "done" {
-                    Notifier.send(title: "\(s.project) : terminé ✅", body: "En \(s.duration) · \(PulseStyle.cost(s.costUsd))")
+                    Notifier.send(title: "\(s.project) : terminé ✅", body: "En \(s.duration)")
                 } else {
                     Notifier.send(title: "\(s.project) : erreur", body: s.activity)
                 }
@@ -174,6 +174,12 @@ final class LiveMonitor: ObservableObject {
         sessions.first { $0.status == "waiting" } ?? sessions.first { $0.isActive } ?? sessions.first
     }
 
+    /// Fin estimée arrondie à 30 s, pour ne pas redessiner la Live Activity à chaque relevé.
+    static func estimatedEnd(_ s: PulseState.Session) -> Double {
+        guard let eta = s.etaSeconds, eta >= 0, s.isActive else { return 0 }
+        return ((Date().timeIntervalSince1970 + Double(eta)) / 30).rounded() * 30
+    }
+
     static func content(from state: PulseState?) -> PulseAttributes.ContentState {
         let fiveHour = state?.limits.fiveHour.map { Int($0.pct.rounded()) } ?? -1
         let resetsAt = state?.limits.fiveHour?.resetsAt ?? 0
@@ -189,7 +195,7 @@ final class LiveMonitor: ObservableObject {
             stepsTotal: s.stepsTotal,
             agents: s.agents,
             workflow: s.workflow,
-            costUsd: s.costUsd,
+            estimatedEndAt: Self.estimatedEnd(s),
             fiveHourPct: fiveHour,
             fiveHourResetsAt: resetsAt,
             startedAt: s.startedAt,

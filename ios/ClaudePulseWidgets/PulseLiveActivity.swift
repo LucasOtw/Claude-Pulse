@@ -2,10 +2,13 @@ import ActivityKit
 import SwiftUI
 import WidgetKit
 
+/// Live Activity façon suivi de course : marque, grand titre, détail précis,
+/// étapes en segments et piste de la limite 5 h. Toujours en noir.
 struct PulseLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: PulseAttributes.self) { context in
             LockScreenView(state: context.state, isStale: context.isStale)
+                .environment(\.colorScheme, .dark)
                 .activityBackgroundTint(Color.black)
                 .activitySystemActionForegroundColor(.white)
         } dynamicIsland: { context in
@@ -13,47 +16,44 @@ struct PulseLiveActivity: Widget {
             let color = PulseStyle.color(for: state.status)
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    HStack(spacing: 8) {
-                        StatusBadge(status: state.status, size: 28)
-                        Text(state.project)
-                            .font(.headline)
-                            .lineLimit(1)
-                    }
-                    .padding(.leading, 4)
+                    Brand(project: nil)
+                        .padding(.leading, 6)
+                        .padding(.top, 2)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    ElapsedText(state: state)
-                        .font(.headline.monospacedDigit())
-                        .foregroundStyle(color)
-                        .multilineTextAlignment(.trailing)
-                        .frame(maxWidth: 80, alignment: .trailing)
-                        .padding(.trailing, 4)
+                    Text(state.project)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(PulseStyle.textSecondary)
+                        .lineLimit(1)
+                        .padding(.trailing, 6)
+                        .padding(.top, 2)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(state.activity)
-                            .font(.subheadline)
-                            .foregroundStyle(PulseStyle.textSecondary)
-                            .lineLimit(1)
-                        TaskLine(state: state)
-                        LimitFooter(state: state, barHeight: 10)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Headline(state: state, size: 19)
+                        Subline(state: state)
+                        if state.stepsTotal > 0 {
+                            SegmentedBar(done: state.stepsDone, total: state.stepsTotal)
+                        }
+                        LimitRow(state: state)
                     }
-                    .padding(.horizontal, 4)
-                    .padding(.top, 2)
+                    .padding(.horizontal, 6)
+                    .environment(\.colorScheme, .dark)
                 }
             } compactLeading: {
                 Image(systemName: PulseStyle.symbol(for: state.status))
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(color)
             } compactTrailing: {
-                if state.fiveHourPct >= 0 {
+                if let end = state.estimatedEnd {
+                    Text(timerInterval: Date.now...max(end, Date.now), countsDown: true, showsHours: false)
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(color)
+                        .frame(maxWidth: 44)
+                } else if state.fiveHourPct >= 0 {
                     Text("\(state.fiveHourPct)%")
                         .font(.caption.weight(.semibold).monospacedDigit())
                         .foregroundStyle(PulseStyle.gauge(Double(state.fiveHourPct)))
-                } else if state.isActive {
-                    ElapsedText(state: state)
-                        .font(.caption.monospacedDigit())
-                        .frame(maxWidth: 44)
                 }
             } minimal: {
                 ZStack {
@@ -63,149 +63,172 @@ struct PulseLiveActivity: Widget {
                         .foregroundStyle(color)
                 }
                 .padding(2)
+                .environment(\.colorScheme, .dark)
             }
             .keylineTint(color)
         }
     }
 }
 
-/// Chrono qui défile pendant la tâche, durée figée une fois terminée.
-struct ElapsedText: View {
-    let state: PulseAttributes.ContentState
+// MARK: - Écran verrouillé
 
-    var body: some View {
-        if state.isActive {
-            Text(state.startDate, style: .timer)
-        } else if !state.duration.isEmpty {
-            Text(state.duration)
-        } else {
-            Text("—")
-        }
-    }
-}
-
-/// Écran verrouillé : en-tête, tâche en cours, puis la grosse barre de limite 5 h.
 struct LockScreenView: View {
     let state: PulseAttributes.ContentState
     let isStale: Bool
 
     var body: some View {
-        let color = PulseStyle.color(for: state.status)
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 12) {
-                StatusBadge(status: state.status, size: 38)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(state.project)
-                        .font(.system(.headline, design: .rounded))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    Text(isStale ? "Plus de nouvelles : rouvre Claude Pulse" : state.activity)
-                        .font(.subheadline)
-                        .foregroundStyle(PulseStyle.textSecondary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 2) {
-                    ElapsedText(state: state)
-                        .font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
-                        .foregroundStyle(.white)
+        VStack(alignment: .leading, spacing: 9) {
+            Brand(project: state.project)
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Headline(state: state, size: 22)
+                Spacer(minLength: 4)
+                if state.isActive {
+                    Text(state.startDate, style: .timer)
+                        .font(.subheadline.weight(.medium).monospacedDigit())
+                        .foregroundStyle(PulseStyle.textTertiary)
                         .multilineTextAlignment(.trailing)
-                        .frame(maxWidth: 90, alignment: .trailing)
-                    Text(PulseStyle.label(for: state.status).uppercased())
-                        .font(.system(size: 10, weight: .bold))
-                        .tracking(0.6)
-                        .foregroundStyle(color)
+                        .frame(maxWidth: 70, alignment: .trailing)
                 }
             }
 
-            if state.stepsTotal > 0 || state.agents > 0 || !state.workflow.isEmpty || state.otherActive > 0 {
-                TaskLine(state: state)
+            if isStale {
+                Text("Plus de nouvelles : rouvre Claude Pulse")
+                    .font(.subheadline)
+                    .foregroundStyle(PulseStyle.warn)
+                    .lineLimit(1)
+            } else {
+                Subline(state: state)
             }
 
-            LimitFooter(state: state, barHeight: 14)
+            if state.stepsTotal > 0 {
+                SegmentedBar(done: state.stepsDone, total: state.stepsTotal)
+            }
+
+            LimitRow(state: state)
+                .padding(.top, 2)
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 16)
+        .padding(.vertical, 14)
     }
 }
 
-/// Étape en cours, workflow, sous-agents, autres sessions.
-struct TaskLine: View {
+/// « Claude Pulse » à gauche, projet à droite (comme la plaque d'immatriculation chez Uber).
+struct Brand: View {
+    let project: String?
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "waveform.path.ecg")
+                .font(.system(size: 13, weight: .heavy))
+                .foregroundStyle(PulseStyle.accent)
+            (Text("Claude ").foregroundStyle(PulseStyle.textPrimary) + Text("Pulse").foregroundStyle(PulseStyle.accent))
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+            if let project {
+                Spacer(minLength: 8)
+                Text(project)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(PulseStyle.textSecondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+/// Le grand titre : temps restant, demande de validation, ou fin.
+struct Headline: View {
+    let state: PulseAttributes.ContentState
+    let size: CGFloat
+
+    var body: some View {
+        title
+            .font(.system(size: size, weight: .bold, design: .rounded))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+    }
+
+    private var title: Text {
+        let white = PulseStyle.textPrimary
+        switch state.status {
+        case "waiting":
+            return Text("Attend ta validation").foregroundStyle(PulseStyle.warn)
+        case "done":
+            return Text("Terminé").foregroundStyle(PulseStyle.good)
+                + Text(state.duration.isEmpty ? "" : " en \(state.duration)").foregroundStyle(white)
+        case "error":
+            return Text("Erreur").foregroundStyle(PulseStyle.critical)
+        case "idle":
+            return Text("Aucune tâche en cours").foregroundStyle(white)
+        default:
+            if let end = state.estimatedEnd {
+                let seconds = Int(end.timeIntervalSinceNow)
+                return Text(PulseStyle.remaining(seconds)).foregroundStyle(PulseStyle.accent)
+                    + Text(" · fin vers \(PulseStyle.clock(end))").foregroundStyle(white)
+            }
+            if !state.currentStep.isEmpty {
+                return Text(state.currentStep).foregroundStyle(white)
+            }
+            if state.status == "background" {
+                return Text("En arrière-plan").foregroundStyle(PulseStyle.info)
+            }
+            return Text("Claude travaille").foregroundStyle(white)
+        }
+    }
+}
+
+/// Ce que fait Claude précisément, préfixé de l'étape en cours.
+struct Subline: View {
     let state: PulseAttributes.ContentState
 
     var body: some View {
-        HStack(spacing: 8) {
-            if state.stepsTotal > 0 {
+        HStack(spacing: 6) {
+            if state.stepsTotal > 0 && state.isActive {
                 Text("\(min(state.stepsDone + 1, state.stepsTotal))/\(state.stepsTotal)")
-                    .font(.caption.weight(.bold).monospacedDigit())
+                    .font(.subheadline.weight(.bold).monospacedDigit())
                     .foregroundStyle(PulseStyle.accent)
-                Text(state.currentStep.isEmpty ? "Étape en cours" : state.currentStep)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(1)
-            } else if !state.workflow.isEmpty {
-                Label(state.workflow, systemImage: "flowchart")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(1)
             }
-            Spacer(minLength: 4)
+            Text(state.activity)
+                .font(.subheadline)
+                .foregroundStyle(PulseStyle.textSecondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
             if state.agents > 0 {
-                Chip(text: "\(state.agents)", symbol: "person.2.fill")
+                Label("\(state.agents)", systemImage: "person.2.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PulseStyle.textTertiary)
             }
             if state.otherActive > 0 {
-                Chip(text: "+\(state.otherActive)", symbol: "rectangle.stack.fill")
+                Text("+\(state.otherActive)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(PulseStyle.textTertiary)
             }
         }
     }
 }
 
-struct Chip: View {
-    let text: String
-    let symbol: String
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: symbol)
-            Text(text)
-        }
-        .font(.caption2.weight(.semibold))
-        .foregroundStyle(.white.opacity(0.75))
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3)
-        .background(Color.white.opacity(0.10), in: Capsule())
-    }
-}
-
-/// Libellé + grosse barre de la limite 5 h.
-struct LimitFooter: View {
+/// « 5 h » — piste — « 10 % · 14:00 »
+struct LimitRow: View {
     let state: PulseAttributes.ContentState
-    let barHeight: CGFloat
 
     var body: some View {
         let known = state.fiveHourPct >= 0
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("Limite 5 h")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.8))
-                if known {
-                    Text("\(state.fiveHourPct) %")
-                        .font(.caption.weight(.bold).monospacedDigit())
-                        .foregroundStyle(PulseStyle.gauge(Double(state.fiveHourPct)))
-                }
-                Spacer()
+        let pct = Double(state.fiveHourPct)
+        HStack(spacing: 10) {
+            Text("5 h")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(PulseStyle.textSecondary)
+            LimitTrack(pct: known ? pct : nil, color: known ? PulseStyle.gauge(pct) : PulseStyle.textTertiary)
+            VStack(alignment: .trailing, spacing: 0) {
+                Text(known ? "\(state.fiveHourPct) %" : "—")
+                    .font(.caption.weight(.bold).monospacedDigit())
+                    .foregroundStyle(known ? PulseStyle.gauge(pct) : PulseStyle.textTertiary)
                 if let reset = state.fiveHourResetDate {
-                    Text("réinit. \(PulseStyle.resetTime(reset))")
+                    Text(PulseStyle.clock(reset))
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(PulseStyle.textTertiary)
-                } else if !known {
-                    Text("en attente d'un relevé")
-                        .font(.caption2)
                         .foregroundStyle(PulseStyle.textTertiary)
                 }
             }
-            LimitBar(pct: known ? Double(state.fiveHourPct) : nil, height: barHeight)
+            .frame(minWidth: 38, alignment: .trailing)
         }
     }
 }

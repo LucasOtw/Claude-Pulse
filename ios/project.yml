@@ -35,7 +35,6 @@ targets:
         # Le son silencieux garde l'app éveillée pour mettre à jour la Live Activity écran verrouillé.
         UIBackgroundModes: [audio]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        UIUserInterfaceStyle: Dark
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lucasotw.claudepulse

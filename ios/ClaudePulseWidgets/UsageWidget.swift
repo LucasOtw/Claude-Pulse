@@ -46,7 +46,7 @@ struct UsageWidget: Widget {
                 .containerBackground(for: .widget) { PulseStyle.background }
         }
         .configurationDisplayName("Utilisation Claude")
-        .description("Limites 5 h / 7 jours, coût du jour et sessions en cours.")
+        .description("Limites 5 h / 7 jours et sessions en cours.")
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
@@ -78,9 +78,9 @@ struct UsageWidgetView: View {
             WidgetLimit(title: "7 j", pct: sevenDay)
             Spacer(minLength: 0)
             HStack {
-                Text(PulseStyle.cost(state?.today.costUsd ?? 0))
-                    .font(.headline.monospacedDigit())
-                    .foregroundStyle(.white)
+                Text("\(state?.today.sessions ?? 0) session\((state?.today.sessions ?? 0) > 1 ? "s" : "")")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PulseStyle.textSecondary)
                 Spacer()
                 activeBadge
             }
@@ -94,9 +94,9 @@ struct UsageWidgetView: View {
                 WidgetLimit(title: "5 h", pct: fiveHour)
                 WidgetLimit(title: "7 j", pct: sevenDay)
                 Spacer(minLength: 0)
-                Text("Aujourd'hui \(PulseStyle.cost(state?.today.costUsd ?? 0))")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                Text("\(state?.today.sessions ?? 0) session\((state?.today.sessions ?? 0) > 1 ? "s" : "") aujourd'hui")
+                    .font(.caption)
+                    .foregroundStyle(PulseStyle.textSecondary)
             }
             VStack(alignment: .leading, spacing: 8) {
                 let sessions = Array((state?.activeSessions ?? []).prefix(2))
@@ -113,7 +113,7 @@ struct UsageWidgetView: View {
                                 .font(.caption.bold())
                                 .foregroundStyle(PulseStyle.color(for: session.status))
                                 .lineLimit(1)
-                            Text(session.activity).font(.caption2).foregroundStyle(.white).lineLimit(1)
+                            Text(session.activity).font(.caption2).foregroundStyle(PulseStyle.textPrimary).lineLimit(1)
                             if session.stepsTotal > 0 {
                                 ProgressView(value: Double(session.stepsDone), total: Double(session.stepsTotal))
                                     .tint(PulseStyle.accent)
@@ -130,7 +130,7 @@ struct UsageWidgetView: View {
     private var header: some View {
         HStack(spacing: 4) {
             Image(systemName: "waveform.path.ecg").foregroundStyle(PulseStyle.accent)
-            Text("Claude").font(.system(.headline, design: .rounded)).foregroundStyle(.white)
+            Text("Claude").font(.system(.headline, design: .rounded)).foregroundStyle(PulseStyle.textPrimary)
             Spacer()
             if entry.error != nil {
                 Image(systemName: "wifi.exclamationmark").foregroundStyle(.secondary).font(.caption)
@@ -168,7 +168,7 @@ struct UsageWidgetView: View {
                     ProgressView(value: Double(session.stepsDone), total: Double(session.stepsTotal))
                 }
             } else {
-                Text("Aujourd'hui \(PulseStyle.cost(state?.today.costUsd ?? 0))")
+                Text("\(state?.today.sessions ?? 0) session\((state?.today.sessions ?? 0) > 1 ? "s" : "") aujourd'hui")
             }
         }
     }

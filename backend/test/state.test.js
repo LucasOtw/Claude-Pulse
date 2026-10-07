@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyEvent, progress, formatDuration, snapshot, publicSession, SILENT_AFTER_MS } from '../lib/state.js';
+import { applyEvent, progress, formatDuration, snapshot, publicSession, toolLabel, SILENT_AFTER_MS } from '../lib/state.js';
 
 const SID = 's1';
 const T0 = 1_700_000_000_000;
@@ -111,8 +111,8 @@ test('publicSession : clés attendues par Swift et usage fusionné', () => {
   const s = play([[0, { e: 'UserPromptSubmit' }]]);
   const p = publicSession(snapshot(s), { costUsd: 1.234, contextPct: 41.6, model: 'Opus', title: 'Refonte' }, sec(90));
   assert.deepEqual(Object.keys(p).sort(), [
-    'activity', 'agents', 'contextPct', 'costUsd', 'currentStep', 'duration', 'model', 'project', 'sid',
-    'startedAt', 'status', 'stepsDone', 'stepsTotal', 'title', 'updatedAt', 'workflow',
+    'activity', 'agents', 'contextPct', 'costUsd', 'currentStep', 'duration', 'etaSeconds', 'model', 'project',
+    'sid', 'startedAt', 'status', 'stepsDone', 'stepsTotal', 'title', 'updatedAt', 'workflow',
   ]);
   assert.equal(p.costUsd, 1.23);
   assert.equal(p.contextPct, 42);
@@ -125,4 +125,37 @@ test('formatDuration', () => {
   assert.equal(formatDuration(5 * 60_000), '5 min');
   assert.equal(formatDuration(65 * 60_000), '1 h 05');
   assert.equal(formatDuration(120 * 60_000), '2 h');
+});
+
+test('ce que fait Claude, précisément', () => {
+  assert.equal(toolLabel('Edit', 'ContentView.swift'), 'Modifie ContentView.swift');
+  assert.equal(toolLabel('Write', 'README.md'), 'Écrit README.md');
+  assert.equal(toolLabel('Read', 'state.js'), 'Lit state.js');
+  assert.equal(toolLabel('Bash', 'run backend tests'), 'Run backend tests');
+  assert.equal(toolLabel('Bash', ''), 'Exécute des commandes');
+  assert.equal(toolLabel('Agent', 'Explore auth flow'), 'Sous-agent : Explore auth flow');
+  assert.equal(toolLabel('WebFetch', 'docs.anthropic.com'), 'Lit docs.anthropic.com');
+  const s = play([[0, { e: 'PreToolUse', tool: 'Edit', detail: 'LiveMonitor.swift' }]]);
+  assert.equal(s.activity, 'Modifie LiveMonitor.swift');
+});
+
+test('temps restant estimé à partir des étapes faites', () => {
+  const todos = (done) => Array.from({ length: 5 }, (_, i) => ({ c: `É${i}`, s: i < done ? 'completed' : i === done ? 'in_progress' : 'pending' }));
+  let s = play([[0, { e: 'UserPromptSubmit' }], [60, { e: 'PreToolUse', tool: 'TodoWrite', todos: todos(0) }]]);
+  assert.equal(publicSession(snapshot(s), null, sec(120)).etaSeconds, -1, 'aucune étape faite : pas d’estimation');
+  // 2 étapes en 4 min depuis l'apparition de la liste → 2 min par étape → 3 restantes = 6 min
+  s = play([[300, { e: 'PreToolUse', tool: 'TodoWrite', todos: todos(2) }]], s);
+  assert.equal(publicSession(snapshot(s), null, sec(300)).etaSeconds, 360);
+  s = play([[400, { e: 'Stop', bg: [] }]], s);
+  assert.equal(publicSession(snapshot(s), null, sec(400)).etaSeconds, -1, 'terminé : pas d’estimation');
+});
+
+test('une liste terminée ne réapparaît pas au tour suivant', () => {
+  let s = play([
+    [0, { e: 'UserPromptSubmit' }],
+    [10, { e: 'PreToolUse', tool: 'TodoWrite', todos: [{ c: 'A', s: 'completed' }, { c: 'B', s: 'completed' }] }],
+    [20, { e: 'Stop', bg: [] }],
+    [100, { e: 'UserPromptSubmit' }],
+  ]);
+  assert.deepEqual(progress(s), { done: 0, total: 0, current: '' });
 });
