@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="900" viewBox="0 0 440 900" role="img" aria-label="Live Activity Claude Pulse sur l'écran verrouillé : tâche en cours, demande d'autorisation, tâche terminée">
+  <title>Live Activity sur l'écran verrouillé</title>
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0" stop-color="#0a1633"/>
+      <stop offset="0.55" stop-color="#16244f"/>
+      <stop offset="1" stop-color="#2b1a2a"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="15%" cy="95%" r="70%">
+      <stop offset="0" stop-color="#DE7356" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#DE7356" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="95%" cy="40%" r="55%">
+      <stop offset="0" stop-color="#4b6fd6" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#4b6fd6" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="screen"><rect x="22" y="22" width="396" height="856" rx="56"/></clipPath>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif; }
+    .mono { font-family: "SF Mono", ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    /* Cycle de 12 s : en cours (0-6 s) → autorisation (6-9,5 s) → terminé (9,5-12 s) */
+    .A  { animation: A 12s infinite; }
+    .A1 { animation: A1 12s infinite; }
+    .A2 { animation: A2 12s infinite; }
+    .B  { animation: B 12s infinite; opacity: 0; }
+    .C  { animation: C 12s infinite; opacity: 0; }
+    @keyframes A  { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
+    @keyframes A1 { 0%, 24% { opacity: 1 } 25%, 100% { opacity: 0 } }
+    @keyframes A2 { 0%, 24% { opacity: 0 } 25%, 100% { opacity: 1 } }
+    @keyframes B  { 0%, 49% { opacity: 0 } 50%, 78% { opacity: 1 } 79%, 100% { opacity: 0 } }
+    @keyframes C  { 0%, 78% { opacity: 0 } 79%, 99% { opacity: 1 } 100% { opacity: 0 } }
+    .s2 { animation: s2 12s infinite; }
+    .s3 { animation: s3 12s infinite; }
+    .s4 { animation: s4 12s infinite; }
+    @keyframes s2 { 0%, 24% { opacity: .45 } 25%, 100% { opacity: 1 } }
+    @keyframes s3 { 0%, 24% { opacity: 0 } 25%, 78% { opacity: .45 } 79%, 100% { opacity: 1 } }
+    @keyframes s4 { 0%, 78% { opacity: 0 } 79%, 100% { opacity: 1 } }
+    /* Chrono qui défile, une valeur par seconde */
+    .t { opacity: 0; animation: tick 12s infinite; }
+    @keyframes tick { 0%, 8.3% { opacity: 1 } 8.34%, 100% { opacity: 0 } }
+    .t1 { animation-delay: 1s } .t2 { animation-delay: 2s } .t3 { animation-delay: 3s } .t4 { animation-delay: 4s } .t5 { animation-delay: 5s }
+    /* Toucher « Autoriser » */
+    .tap { animation: tap 12s infinite; transform-origin: 305px 390px; opacity: 0; }
+    @keyframes tap { 0%, 70% { opacity: 0; transform: scale(.2) } 72% { opacity: .55; transform: scale(.6) } 77% { opacity: 0; transform: scale(1.6) } 100% { opacity: 0 } }
+    .press { animation: press 12s infinite; }
+    @keyframes press { 0%, 71% { opacity: 1 } 72%, 75% { opacity: .7 } 76%, 100% { opacity: 1 } }
+    .card { animation: pop 12s infinite; transform-origin: 220px 365px; }
+    @keyframes pop { 0%, 49% { transform: scale(1) } 50% { transform: scale(1.015) } 52%, 78% { transform: scale(1) } 79% { transform: scale(1.015) } 81%, 100% { transform: scale(1) } }
+  </style>
+
+  <!-- Téléphone -->
+  <rect x="8" y="8" width="424" height="884" rx="68" fill="#1b1b1d"/>
+  <rect x="10" y="10" width="420" height="880" rx="66" fill="none" stroke="#3a3a3e" stroke-width="2"/>
+  <g clip-path="url(#screen)">
+    <rect x="22" y="22" width="396" height="856" fill="url(#wall)"/>
+    <rect x="22" y="22" width="396" height="856" fill="url(#glowA)"/>
+    <rect x="22" y="22" width="396" height="856" fill="url(#glowB)"/>
+
+    <!-- Barre d'état -->
+    <rect x="158" y="36" width="124" height="36" rx="18" fill="#000"/>
+    <g fill="#fff">
+      <rect x="352" y="48" width="25" height="12" rx="3.5" fill="none" stroke="#fff" stroke-opacity=".5"/>
+      <rect x="354" y="50" width="18" height="8" rx="2"/>
+      <rect x="378.5" y="52" width="2" height="4" rx="1" opacity=".5"/>
+      <path d="M326 60a10 10 0 0 1 16 0l-2.2 2.2a7 7 0 0 0-11.6 0z M329.5 63.5a5 5 0 0 1 9 0L334 68z" opacity=".95"/>
+    </g>
+
+    <!-- Date et heure -->
+    <text x="220" y="128" text-anchor="middle" font-size="21" font-weight="600" fill="#fff" fill-opacity=".85">mardi 7 octobre</text>
+    <text x="220" y="226" text-anchor="middle" font-size="104" font-weight="700" letter-spacing="-3" fill="#fff" fill-opacity=".93" class="num">14:29</text>
+
+    <!-- Live Activity -->
+    <g class="card" filter="url(#shadow)">
+      <rect x="34" y="262" width="372" height="196" rx="28" fill="#000" fill-opacity=".93"/>
+
+      <!-- Marque + projet -->
+      <path d="M54 293 h6 l3-5 l4 11 l4-15 l3 9 h6" fill="none" stroke="#DE7356" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="86" y="298" font-size="16" font-weight="700" fill="#F4F2EC">Claude <tspan fill="#DE7356">Pulse</tspan></text>
+      <text x="386" y="298" text-anchor="end" font-size="13" font-weight="600" fill="#B3AEA4">Studio_Granit</text>
+
+      <!-- A : en cours -->
+      <g class="A">
+        <text x="54" y="336" font-size="24" font-weight="700" fill="#F4F2EC"><tspan fill="#DE7356">4 min</tspan> · fin vers 14:33</text>
+        <g font-size="15" font-weight="500" fill="#7E796F" text-anchor="end" class="num">
+          <text x="386" y="336" class="t t0">7:41</text>
+          <text x="386" y="336" class="t t1">7:42</text>
+          <text x="386" y="336" class="t t2">7:43</text>
+          <text x="386" y="336" class="t t3">7:44</text>
+          <text x="386" y="336" class="t t4">7:45</text>
+          <text x="386" y="336" class="t t5">7:46</text>
+        </g>
+        <g class="A1" font-size="15">
+          <text x="54" y="364" font-weight="700" fill="#DE7356" class="num">2/5</text>
+          <text x="86" y="364" fill="#B3AEA4">Modifie contact.html</text>
+        </g>
+        <g class="A2" font-size="15">
+          <text x="54" y="364" font-weight="700" fill="#DE7356" class="num">3/5</text>
+          <text x="86" y="364" fill="#B3AEA4">Lance les tests du formulaire</text>
+        </g>
+        <!-- 2 sous-agents -->
+        <g fill="#7E796F">
+          <circle cx="363" cy="355" r="3.2"/><path d="M357 364.5a6 6 0 0 1 12 0z"/>
+          <circle cx="370" cy="354" r="2.6" opacity=".7"/>
+          <text x="386" y="364" text-anchor="end" font-size="12" font-weight="600">2</text>
+        </g>
+      </g>
+
+      <!-- B : demande d'autorisation -->
+      <g class="B">
+        <circle cx="62" cy="329" r="9" fill="#FAC24A"/>
+        <text x="62" y="334" text-anchor="middle" font-size="14" font-weight="800" fill="#000">?</text>
+        <text x="78" y="336" font-size="22" font-weight="700" fill="#F4F2EC">Autoriser ? <tspan font-size="13" font-weight="600" fill="#B3AEA4">Studio_Granit · Bash</tspan></text>
+        <text x="54" y="362" font-size="15" fill="#F4F2EC" class="mono">npm run build</text>
+        <rect x="54" y="374" width="162" height="32" rx="16" fill="#ffffff" fill-opacity=".14"/>
+        <text x="135" y="395" text-anchor="middle" font-size="15" font-weight="600" fill="#F4F2EC">Refuser</text>
+        <g class="press">
+          <rect x="224" y="374" width="162" height="32" rx="16" fill="#DE7356"/>
+          <text x="305" y="395" text-anchor="middle" font-size="15" font-weight="600" fill="#fff">Autoriser</text>
+        </g>
+        <circle class="tap" cx="305" cy="390" r="26" fill="#fff"/>
+      </g>
+
+      <!-- C : terminé -->
+      <g class="C">
+        <text x="54" y="336" font-size="24" font-weight="700" fill="#F4F2EC"><tspan fill="#5CD187">Terminé</tspan> en 12 min</text>
+        <text x="54" y="364" font-size="15" fill="#B3AEA4">3 fichiers modifiés · 6 commandes</text>
+      </g>
+
+      <!-- Étapes (masquées pendant la demande d'autorisation) -->
+      <g class="A">
+        <g fill="#ffffff" fill-opacity=".14">
+          <rect x="54" y="378" width="62.4" height="5" rx="2.5"/><rect x="121.4" y="378" width="62.4" height="5" rx="2.5"/><rect x="188.8" y="378" width="62.4" height="5" rx="2.5"/><rect x="256.2" y="378" width="62.4" height="5" rx="2.5"/><rect x="323.6" y="378" width="62.4" height="5" rx="2.5"/>
+        </g>
+        <rect x="54" y="378" width="62.4" height="5" rx="2.5" fill="#DE7356"/>
+        <rect class="s2" x="121.4" y="378" width="62.4" height="5" rx="2.5" fill="#DE7356"/>
+        <rect class="s3" x="188.8" y="378" width="62.4" height="5" rx="2.5" fill="#DE7356"/>
+      </g>
+      <g class="C">
+        <rect x="54" y="378" width="332" height="5" rx="2.5" fill="#DE7356" opacity="0"/>
+        <rect x="54" y="378" width="62.4" height="5" rx="2.5" fill="#DE7356"/><rect x="121.4" y="378" width="62.4" height="5" rx="2.5" fill="#DE7356"/><rect x="188.8" y="378" width="62.4" height="5" rx="2.5" fill="#DE7356"/><rect x="256.2" y="378" width="62.4" height="5" rx="2.5" fill="#DE7356"/><rect x="323.6" y="378" width="62.4" height="5" rx="2.5" fill="#DE7356"/>
+      </g>
+
+      <!-- Limite 5 h, façon suivi de course -->
+      <text x="54" y="428" font-size="12" font-weight="700" fill="#B3AEA4">5 h</text>
+      <line x1="194" y1="424" x2="318" y2="424" stroke="#fff" stroke-opacity=".16" stroke-width="4" stroke-linecap="round" stroke-dasharray="6 7"/>
+      <circle cx="324" cy="424" r="4.5" fill="none" stroke="#fff" stroke-opacity=".16" stroke-width="3"/>
+      <rect x="84" y="422" width="106" height="4" rx="2" fill="#5CD187">
+        <animate attributeName="width" values="100;106;110;100" keyTimes="0;0.5;0.95;1" dur="12s" repeatCount="indefinite"/>
+      </rect>
+      <g>
+        <animateTransform attributeName="transform" type="translate" values="0 0;6 0;10 0;0 0" keyTimes="0;0.5;0.95;1" dur="12s" repeatCount="indefinite"/>
+        <circle cx="187" cy="424" r="13" fill="#000"/>
+        <circle cx="187" cy="424" r="11.75" fill="none" stroke="#5CD187" stroke-width="2.5"/>
+        <path d="M180 424 h3 l1.6-3 l2.4 7 l2.2-9 l1.7 5 h3" fill="none" stroke="#5CD187" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <text x="386" y="420" text-anchor="end" font-size="12" font-weight="700" fill="#5CD187" class="num">42 %</text>
+      <text x="386" y="435" text-anchor="end" font-size="11" fill="#7E796F" class="num">17:20</text>
+    </g>
+
+    <!-- Boutons de l'écran verrouillé -->
+    <circle cx="86" cy="800" r="27" fill="#fff" fill-opacity=".14"/>
+    <path d="M80 788h12l-2 6v15a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 82 809v-15z" fill="#fff" fill-opacity=".9"/>
+    <circle cx="354" cy="800" r="27" fill="#fff" fill-opacity=".14"/>
+    <path d="M342 792h6l2-3h8l2 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-24a2 2 0 0 1-2-2v-14a2 2 0 0 1 2-2z" fill="#fff" fill-opacity=".9"/>
+    <circle cx="354" cy="801" r="5" fill="#2a2d45"/>
+    <rect x="152" y="858" width="136" height="5" rx="2.5" fill="#fff" fill-opacity=".85"/>
+  </g>
+</svg>

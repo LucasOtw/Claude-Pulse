@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-label="Exemples de notifications : tâche terminée, limite de 5 heures, accord nécessaire">
+  <title>Notifications</title>
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a1633"/>
+      <stop offset="0.6" stop-color="#18264f"/>
+      <stop offset="1" stop-color="#2d1b26"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="85%" cy="100%" r="60%">
+      <stop offset="0" stop-color="#DE7356" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#DE7356" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="icon" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2a1a15"/>
+      <stop offset="1" stop-color="#0e0b0a"/>
+    </linearGradient>
+    <clipPath id="frame"><rect width="960" height="420" rx="28"/></clipPath>
+    <g id="appicon">
+      <rect width="44" height="44" rx="11" fill="url(#icon)"/>
+      <path d="M7 25 H16 L19.5 20 L23 32 L27.5 12 L31 25 H37" fill="none" stroke="#DE7356" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="37" cy="25" r="3" fill="#FBD5C4"/>
+    </g>
+  </defs>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif; }
+    .n { opacity: 0; animation: n 10s cubic-bezier(.2,.8,.2,1) infinite; }
+    .n2 { animation-delay: .7s } .n3 { animation-delay: 1.4s }
+    @keyframes n { 0% { opacity: 0; transform: translateY(-18px) } 6% { opacity: 1; transform: none } 84% { opacity: 1; transform: none } 92%, 100% { opacity: 0; transform: none } }
+  </style>
+  <g clip-path="url(#frame)">
+    <rect width="960" height="420" fill="url(#wall)"/>
+    <rect width="960" height="420" fill="url(#glow)"/>
+
+    <!-- Tâche terminée -->
+    <g class="n">
+      <rect x="130" y="34" width="700" height="104" rx="26" fill="#2a2f4a" fill-opacity=".78" stroke="#fff" stroke-opacity=".10"/>
+      <use href="#appicon" x="150" y="54"/>
+      <text x="212" y="69" font-size="17" font-weight="700" fill="#fff">Studio_Granit · Terminé en 12 min</text>
+      <text x="808" y="69" text-anchor="end" font-size="14" fill="#fff" fill-opacity=".55">maintenant</text>
+      <text x="212" y="94" font-size="15" fill="#fff" fill-opacity=".88">3 fichiers modifiés : contact.html, style.css et main.js</text>
+      <text x="212" y="117" font-size="15" fill="#fff" fill-opacity=".88">4 étapes sur 4 · 6 commandes · 1 sous-agent</text>
+    </g>
+
+    <!-- Limite -->
+    <g class="n n2">
+      <rect x="130" y="152" width="700" height="84" rx="26" fill="#2a2f4a" fill-opacity=".78" stroke="#fff" stroke-opacity=".10"/>
+      <use href="#appicon" x="150" y="172"/>
+      <text x="212" y="187" font-size="17" font-weight="700" fill="#fff">Limite de 5 h utilisée à 82 %</text>
+      <text x="808" y="187" text-anchor="end" font-size="14" fill="#fff" fill-opacity=".55">il y a 3 min</text>
+      <text x="212" y="212" font-size="15" fill="#fff" fill-opacity=".88">Il te reste 18 % jusqu'à la remise à zéro à 17:20 (dans 1 h 12).</text>
+    </g>
+
+    <!-- Accord nécessaire -->
+    <g class="n n3">
+      <rect x="130" y="250" width="700" height="104" rx="26" fill="#2a2f4a" fill-opacity=".78" stroke="#fff" stroke-opacity=".10"/>
+      <use href="#appicon" x="150" y="270"/>
+      <text x="212" y="285" font-size="17" font-weight="700" fill="#fff">Studio_Granit · Accord nécessaire</text>
+      <text x="808" y="285" text-anchor="end" font-size="14" fill="#fff" fill-opacity=".55">il y a 9 min</text>
+      <text x="212" y="310" font-size="15" fill="#fff" fill-opacity=".88">Claude veut exécuter une commande et attend ton accord dans le terminal.</text>
+      <text x="212" y="333" font-size="15" fill="#fff" fill-opacity=".88">Étape en cours : Lancer les tests</text>
+    </g>
+
+    <text x="480" y="394" text-anchor="middle" font-size="13" fill="#fff" fill-opacity=".45">Arrivent aussi sur l'Apple Watch, même app fermée (avec ntfy)</text>
+  </g>
+</svg>
