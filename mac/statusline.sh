@@ -25,6 +25,7 @@ if [ -n "$PULSE_URL" ] && [ -n "$PULSE_TOKEN" ] && command -v jq >/dev/null; the
         title: (.session_name // null),
         model: (.model.display_name // null),
         costUsd: (.cost.total_cost_usd // 0),
+        durationMs: (.cost.total_duration_ms // 0),
         contextPct: (.context_window.used_percentage // 0),
         fiveHour: (.rate_limits.five_hour | win),
         sevenDay: (.rate_limits.seven_day | win)
