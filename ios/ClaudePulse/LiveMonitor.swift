@@ -29,6 +29,8 @@ final class LiveMonitor: ObservableObject {
     private var resuming = false
     private var knownApprovals = Set<String>()
     private var seededApprovals = false
+    /// Une limite atteinte arrête toutes les sessions d'un coup : une seule notification d'erreur par 10 min.
+    private var lastErrorNotice = Date.distantPast
 
     // MARK: Démarrer / arrêter
 
@@ -226,6 +228,8 @@ final class LiveMonitor: ObservableObject {
                         body: s.summary ?? "Claude a fini et attend ta prochaine demande."
                     )
                 } else {
+                    guard Date().timeIntervalSince(lastErrorNotice) > 600 else { continue }
+                    lastErrorNotice = Date()
                     Notifier.send(title: "\(s.project) · Arrêt sur erreur", body: "\(s.activity)\nRelance la tâche depuis le terminal.")
                 }
             default:

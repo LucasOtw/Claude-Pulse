@@ -6,6 +6,16 @@ const ACTIVE = new Set(['running', 'waiting', 'background']);
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n > 1 ? many : one}`;
 
+const TZ = () => process.env.PULSE_TZ || 'Europe/Paris';
+const clock = (ms) => new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: TZ() });
+const dayOf = (ms) => new Date(ms).toLocaleDateString('fr-FR', { timeZone: TZ() });
+
+/** « à 19:20 (dans 2 h 51) », ou « jeudi à 14:00 » si ce n'est pas aujourd'hui. */
+function resumeAt(ms, now) {
+  if (dayOf(ms) === dayOf(now)) return `à ${clock(ms)} (dans ${formatDuration(ms - now)})`;
+  return `${new Date(ms).toLocaleDateString('fr-FR', { weekday: 'long', timeZone: TZ() })} à ${clock(ms)}`;
+}
+
 /** « contact.html, style.css et 3 autres » */
 export function fileList(files, count) {
   const shown = files.slice(0, 3);
@@ -63,8 +73,12 @@ function doneMessage(s) {
   return lines.join('\n');
 }
 
-/** Changement de statut d'une session → notification (ou null). */
-export function sessionAlert(prev, s, now) {
+/**
+ * Changement de statut d'une session → notification (ou null).
+ * `key` / `ttl` : une notification portant la même clé n'est pas renvoyée avant `ttl` secondes
+ * (sinon, clé tirée du texte, voir dedupeKey).
+ */
+export function sessionAlert(prev, s, now, limits = null) {
   const before = prev?.status;
   if (s.status === before) return null;
   const p = s.project;
@@ -83,13 +97,67 @@ export function sessionAlert(prev, s, now) {
     };
   }
   if (s.status === 'error' && ACTIVE.has(before)) {
+    if (s.error === 'rate_limit') return rateLimitAlert(limits, now);
     const why = ERRORS[s.error] ?? (s.error ? `Erreur : ${s.error}.` : 'Erreur inconnue.');
-    return { title: `${p} · Arrêt sur erreur`, message: `${why}\nRelance la tâche depuis le terminal.`, priority: 4 };
+    return {
+      key: `alert:error:${p}:${s.error ?? ''}`, // même erreur sur le même projet : une fois par 10 min
+      ttl: 600,
+      title: `${p} · Arrêt sur erreur`,
+      message: `${why}\nRelance la tâche depuis le terminal.`,
+      priority: 4,
+    };
   }
   if (s.status === 'done' && ACTIVE.has(before) && now - s.turnStartedAt >= 30_000) {
     return { title: `${p} · Terminé en ${formatDuration(now - s.turnStartedAt)}`, message: doneMessage(s), priority: 3 };
   }
   return null;
+}
+
+/**
+ * Limite d'utilisation atteinte : elle vaut pour tout le compte, donc toutes les sessions
+ * (et les sous-sessions d'un workflow) s'arrêtent en même temps. Une seule notification,
+ * avec l'heure de reprise, et une autre programmée à la remise à zéro.
+ */
+export function rateLimitAlert(limits, now) {
+  const candidates = [
+    ['fiveHour', 'Limite de 5 h', limits?.fiveHour],
+    ['sevenDay', 'Limite hebdomadaire', limits?.sevenDay],
+  ].filter(([, , l]) => l?.resetsAt && l.resetsAt * 1000 > now);
+  // La limite atteinte est la plus remplie ; à égalité, celle de 5 h.
+  const hit = candidates.sort((a, b) => (b[2].pct ?? 0) - (a[2].pct ?? 0))[0];
+  if (!hit) {
+    return {
+      key: 'alert:ratelimit',
+      ttl: 3600,
+      title: "Limite d'utilisation atteinte",
+      message: 'Toutes tes sessions Claude Code sont en pause jusqu’à la remise à zéro de ta limite.',
+      priority: 4,
+    };
+  }
+  const [kind, label, l] = hit;
+  const resetMs = l.resetsAt * 1000;
+  return {
+    key: `alert:ratelimit:${l.resetsAt}`,
+    ttl: 8 * 24 * 3600,
+    title: `${label} atteinte`,
+    message: `Toutes tes sessions Claude Code sont en pause.\nReprise possible ${resumeAt(resetMs, now)}.`,
+    priority: 4,
+    followUp: {
+      key: kind === 'fiveHour' ? `alert:reset:${l.resetsAt}` : `alert:reset7:${l.resetsAt}`,
+      ttl: 8 * 24 * 3600,
+      title: `${label} remise à zéro`,
+      message: 'Ta limite repart de zéro : tu peux relancer Claude Code.',
+      priority: 3,
+      delay: l.resetsAt,
+    },
+  };
+}
+
+/** Clé anti-doublon par défaut : le même texte n'est pas renvoyé dans les 2 minutes. */
+export function dedupeKey(n) {
+  let h = 0;
+  for (const c of `${n.title}\n${n.message}`) h = (Math.imul(h, 31) + c.codePointAt(0)) | 0;
+  return { key: n.key ?? `alert:msg:${(h >>> 0).toString(36)}`, ttl: n.ttl ?? 120 };
 }
 
 /** Nouvelle demande de validation à distance (mac/approve.sh) → notification. */

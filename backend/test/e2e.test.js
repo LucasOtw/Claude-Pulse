@@ -214,6 +214,14 @@ test('ntfy : validation demandée, fin de tâche, limite 80 % et remise à zéro
   assert.match(done.title, /^App · Terminé en \d+ min$/);
   assert.equal(done.message, '1 fichier modifié : index.html\n3 commandes');
 
+  // Limite atteinte sur plusieurs sessions en même temps : une seule notification (+ la remise à zéro, déjà programmée).
+  notifications.length = 0;
+  for (const id of ['rl-1', 'rl-2', 'rl-3']) {
+    await call(api.hook, 'POST', { e: 'UserPromptSubmit', sid: id, project: id === 'rl-3' ? 'Autre' : 'App' });
+    await call(api.hook, 'POST', { e: 'StopFailure', sid: id, error: 'rate_limit' });
+  }
+  assert.deepEqual(notifications.map((n) => n.title), ['Limite de 5 h atteinte']);
+
   const st = (await call(api.state, 'GET')).data;
   assert.equal(st.ntfy, true);
   assert.ok(st.limits.updatedAt > 0, 'âge du relevé des limites');

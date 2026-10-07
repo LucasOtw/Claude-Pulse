@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sessionAlert, limitAlerts, approvalAlert, fileList } from '../lib/alerts.js';
+import { sessionAlert, limitAlerts, approvalAlert, fileList, rateLimitAlert, dedupeKey } from '../lib/alerts.js';
 import { isDangerous, describe } from '../lib/approval.js';
 import { buildStats } from '../lib/stats.js';
 
@@ -27,9 +27,10 @@ test('alertes de session : textes clairs, sans emoji', () => {
   assert.equal(done.message, 'Tests corrigés.\n5 fichiers modifiés : contact.html, style.css, main.js et 2 autres\n4 étapes sur 4 · 12 commandes · 1 sous-agent');
   assert.equal(sessionAlert(s('running'), s('done'), T + 120_000).message, 'Claude a fini et attend ta prochaine demande.');
 
-  const err = sessionAlert(s('running'), s('error', { error: 'rate_limit' }), T);
+  const err = sessionAlert(s('running'), s('error', { error: 'overloaded' }), T);
   assert.equal(err.title, 'App · Arrêt sur erreur');
-  assert.match(err.message, /^Limite d'utilisation atteinte\./);
+  assert.match(err.message, /^Les serveurs d'Anthropic sont surchargés\./);
+  assert.equal(err.key, 'alert:error:App:overloaded');
 
   assert.equal(sessionAlert(s('done'), s('done'), T + 120_000), null, 'pas de changement : rien');
   assert.equal(sessionAlert(null, s('done'), T + 120_000), null, 'jamais vue en cours : rien');
@@ -85,4 +86,28 @@ test('statistiques par projet (7 jours et total), ancien format accepté', () =>
     st.projects.map((p) => [p.project, p.weekTokens, p.tokens]),
     [['Studio_Granit', 1e6, 1e6], ['Autre', 1e6, 1e6], ['TomExploreiOS', 0, 2e6]],
   );
+});
+
+test('limite atteinte : une seule notification pour tout le compte, avec l’heure de reprise', () => {
+  const now = Date.UTC(2026, 9, 7, 12, 0); // 14:00 à Paris
+  const limits = { fiveHour: { pct: 100, resetsAt: now / 1000 + 3 * 3600 }, sevenDay: { pct: 40, resetsAt: now / 1000 + 4 * 86400 } };
+  const ios = sessionAlert(s('running', { project: 'TomExploreiOS' }), s('error', { project: 'TomExploreiOS', error: 'rate_limit' }), now, limits);
+  const android = sessionAlert(s('running', { project: 'TomExploreAndroid' }), s('error', { project: 'TomExploreAndroid', error: 'rate_limit' }), now, limits);
+  assert.equal(ios.key, android.key, 'même clé quel que soit le projet : envoyée une fois');
+  assert.equal(ios.title, 'Limite de 5 h atteinte');
+  assert.equal(ios.message, 'Toutes tes sessions Claude Code sont en pause.\nReprise possible à 17:00 (dans 3 h).');
+  assert.equal(ios.followUp.key, `alert:reset:${now / 1000 + 3 * 3600}`, 'même clé que la remise à zéro des 80 %');
+  assert.equal(ios.followUp.delay, now / 1000 + 3 * 3600);
+
+  const weekly = rateLimitAlert({ fiveHour: { pct: 10, resetsAt: now / 1000 + 3600 }, sevenDay: { pct: 100, resetsAt: now / 1000 + 2 * 86400 } }, now);
+  assert.equal(weekly.title, 'Limite hebdomadaire atteinte');
+  assert.match(weekly.message, /Reprise possible vendredi à 14:00\.$/);
+  assert.equal(rateLimitAlert(null, now).key, 'alert:ratelimit', 'sans relevé : une fois par heure');
+});
+
+test('anti-doublon : même texte, même clé', () => {
+  const a = { title: 'App · Terminé en 2 min', message: 'x' };
+  assert.deepEqual(dedupeKey(a), dedupeKey({ ...a }));
+  assert.notEqual(dedupeKey(a).key, dedupeKey({ ...a, message: 'y' }).key);
+  assert.deepEqual(dedupeKey({ ...a, key: 'k', ttl: 5 }), { key: 'k', ttl: 5 });
 });

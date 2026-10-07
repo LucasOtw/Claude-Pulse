@@ -35,6 +35,7 @@ export async function saveSession(s) {
 }
 
 export const getUsage = (sid) => getJSON(`u:${sid}`);
+export const getLimits = () => getJSON('limits');
 
 /** Enregistre un relevé de la status line : usage de la session, limites du compte, coût du jour. */
 export async function recordUsage({ sid, usage, limits, costDelta }, now) {
