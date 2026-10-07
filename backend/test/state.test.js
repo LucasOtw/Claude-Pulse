@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyEvent, progress, formatDuration, snapshot, publicSession, toolLabel, SILENT_AFTER_MS } from '../lib/state.js';
+import { applyEvent, progress, formatDuration, snapshot, publicSession, toolLabel, sessionDetail, SILENT_AFTER_MS } from '../lib/state.js';
 
 const SID = 's1';
 const T0 = 1_700_000_000_000;
@@ -158,4 +158,50 @@ test('une liste terminée ne réapparaît pas au tour suivant', () => {
     [100, { e: 'UserPromptSubmit' }],
   ]);
   assert.deepEqual(progress(s), { done: 0, total: 0, current: '' });
+});
+
+test('sous-agents : description, ce qu’ils font, puis terminés', () => {
+  let s = play([
+    [0, { e: 'UserPromptSubmit' }],
+    [5, { e: 'PreToolUse', tool: 'Agent', detail: 'Explore auth flow' }],
+    [6, { e: 'SubagentStart', agentId: 'a1', agentType: 'Explore' }],
+    [9, { e: 'PreToolUse', tool: 'Read', detail: 'auth.ts', agentId: 'a1', agentType: 'Explore' }],
+  ]);
+  let d = sessionDetail(s, null, sec(10));
+  assert.equal(d.agents.length, 1);
+  assert.deepEqual(
+    { type: d.agents[0].type, description: d.agents[0].description, activity: d.agents[0].activity, status: d.agents[0].status },
+    { type: 'Explore', description: 'Explore auth flow', activity: 'Lit auth.ts', status: 'running' },
+  );
+  assert.equal(d.session.agents, 1);
+  s = play([[40, { e: 'SubagentStop', agentId: 'a1', agentType: 'Explore' }]], s);
+  d = sessionDetail(s, null, sec(41));
+  assert.equal(d.agents[0].status, 'done');
+  assert.equal(d.agents[0].endedAt - d.agents[0].startedAt, 34);
+  assert.equal(d.session.agents, 0);
+  assert.equal(d.log[0].text, 'Sous-agent Explore terminé', 'journal du plus récent au plus ancien');
+});
+
+test('anciennes sessions : agent stocké comme simple type', () => {
+  const s = play([[0, { e: 'UserPromptSubmit' }]]);
+  s.agents = { old: 'general-purpose' };
+  const d = sessionDetail(s, null, sec(5));
+  assert.equal(d.agents[0].type, 'general-purpose');
+  const s2 = play([[6, { e: 'Stop', bg: [] }]], s);
+  assert.equal(sessionDetail(s2, null, sec(7)).agents[0].status, 'done');
+});
+
+test('vue détaillée : toutes les étapes avec leur statut', () => {
+  const s = play([[0, { e: 'PreToolUse', tool: 'TodoWrite', todos: [{ c: 'A', s: 'completed' }, { c: 'B', s: 'in_progress' }, { c: 'C', s: 'pending' }] }]]);
+  assert.deepEqual(sessionDetail(s, null, sec(1)).steps, [
+    { text: 'A', status: 'completed' },
+    { text: 'B', status: 'in_progress' },
+    { text: 'C', status: 'pending' },
+  ]);
+  const t = play([
+    [0, { e: 'TaskCreated', taskId: '1', taskSubject: 'X' }],
+    [1, { e: 'TaskCreated', taskId: '2', taskSubject: 'Y' }],
+    [2, { e: 'TaskCompleted', taskId: '1', taskSubject: 'X' }],
+  ]);
+  assert.deepEqual(sessionDetail(t, null, sec(3)).steps.map((x) => x.status), ['completed', 'in_progress']);
 });

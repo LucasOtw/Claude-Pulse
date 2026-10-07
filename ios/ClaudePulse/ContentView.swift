@@ -7,6 +7,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showSettings = false
     @State private var showDetail = false
+    @State private var selected: PulseState.Session?
 
     private var sessions: [PulseState.Session] { monitor.state?.sessions ?? [] }
     private var active: [PulseState.Session] { sessions.filter(\.isActive) }
@@ -43,7 +44,10 @@ struct ContentView: View {
                 if !active.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         SectionLabel(title: "En cours")
-                        ForEach(active) { SessionCard(session: $0) }
+                        ForEach(active) { session in
+                            Button { selected = session } label: { SessionCard(session: session) }
+                                .buttonStyle(.plain)
+                        }
                     }
                 }
 
@@ -53,7 +57,8 @@ struct ContentView: View {
                         RowGroup {
                             ForEach(Array(recent.enumerated()), id: \.element.id) { index, session in
                                 if index > 0 { RowDivider() }
-                                RecentRow(session: session)
+                                Button { selected = session } label: { RecentRow(session: session) }
+                                    .buttonStyle(.plain)
                             }
                         }
                     }
@@ -82,6 +87,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showSettings) { SettingsView().environmentObject(monitor) }
         .sheet(isPresented: $showDetail) { UsageDetailView().environmentObject(monitor) }
+        .sheet(item: $selected) { SessionDetailView(initial: $0) }
         .tint(PulseStyle.accent)
     }
 }
@@ -408,10 +414,14 @@ struct SessionCard: View {
                     MetaChip(symbol: "sparkle", text: model)
                 }
                 Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(PulseStyle.textTertiary)
             }
         }
         .padding(16)
         .background(PulseStyle.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
             if session.status == "waiting" {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -462,6 +472,7 @@ struct RecentRow: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
+        .contentShape(Rectangle())
     }
 }
 

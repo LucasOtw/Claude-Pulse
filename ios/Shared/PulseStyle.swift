@@ -114,6 +114,14 @@ enum PulseStyle {
         }
     }
 
+    /// « 34 s », « 2 min », « 1 h 05 »
+    static func shortDuration(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(max(seconds, 0)) s" }
+        let min = seconds / 60
+        if min < 60 { return "\(min) min" }
+        return "\(min / 60) h \(String(format: "%02d", min % 60))"
+    }
+
     /// « 7 sept. »
     static func shortDate(_ date: Date) -> String {
         date.formatted(.dateTime.day().month(.abbreviated).locale(fr))

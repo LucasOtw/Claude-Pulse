@@ -124,3 +124,53 @@ struct PulseStats: Codable {
         return f
     }()
 }
+
+/// Réponse de GET /api/session?sid=… : tout le détail d'une session.
+struct SessionDetail: Codable {
+    struct Step: Codable {
+        var text: String
+        /// completed | in_progress | pending
+        var status: String
+    }
+
+    struct Agent: Codable, Identifiable {
+        var id: String
+        var type: String
+        var description: String
+        var activity: String
+        /// running | done
+        var status: String
+        var startedAt: Double
+        var endedAt: Double?
+
+        var startDate: Date { Date(timeIntervalSince1970: startedAt) }
+        var seconds: Int { Int((endedAt ?? Date().timeIntervalSince1970) - startedAt) }
+    }
+
+    struct Workflow: Codable {
+        var name: String
+        var phases: [String]
+    }
+
+    struct LogLine: Codable {
+        var at: Double
+        var text: String
+        var date: Date { Date(timeIntervalSince1970: at) }
+    }
+
+    struct Tokens: Codable {
+        var tokens: Int
+        var input: Int
+        var output: Int
+        var cacheWrite: Int
+        var cacheRead: Int
+        var costUsd: Double
+    }
+
+    var session: PulseState.Session
+    var steps: [Step]
+    var agents: [Agent]
+    var workflow: Workflow?
+    var log: [LogLine]
+    var tokens: Tokens?
+}

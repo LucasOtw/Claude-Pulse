@@ -27,6 +27,13 @@ enum PulseAPI {
         return try JSONDecoder().decode(PulseStats.self, from: data)
     }
 
+    /// Détail d'une session (étapes, sous-agents, journal, tokens).
+    static func fetchSession(_ sid: String) async throws -> SessionDetail {
+        let id = sid.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sid
+        let data = try await request("GET", "/api/session?sid=\(id)")
+        return try JSONDecoder().decode(SessionDetail.self, from: data)
+    }
+
     private static func request(_ method: String, _ path: String, body: [String: String]? = nil) async throws -> Data {
         guard PulseConfig.isConfigured, let url = URL(string: PulseConfig.baseURL + path) else {
             throw PulseAPIError.notConfigured

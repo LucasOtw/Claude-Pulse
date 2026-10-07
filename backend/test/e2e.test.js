@@ -25,6 +25,7 @@ function exec([cmd, ...a]) {
     case 'HSET': { const h = hashes.get(a[0]) ?? new Map(); h.set(a[1], a[2]); hashes.set(a[0], h); return 1; }
     case 'HDEL': { const h = hashes.get(a[0]); a.slice(1).forEach((f) => h?.delete(f)); return 1; }
     // Comme Upstash : tableau plat [champ, valeur, …]
+    case 'HGET': return hashes.get(a[0])?.get(a[1]) ?? null;
     case 'HGETALL': return [...(hashes.get(a[0]) ?? new Map()).entries()].flat();
     default: throw new Error(`commande non simulée : ${cmd}`);
   }
@@ -50,11 +51,12 @@ before(async () => {
     state: (await import('../api/state.js')).default,
     tokens: (await import('../api/tokens.js')).default,
     stats: (await import('../api/stats.js')).default,
+    session: (await import('../api/session.js')).default,
   };
 });
 after(() => redisServer.close());
 
-function call(handler, method, body, token = 'secret') {
+function call(handler, method, body, token = 'secret', query = {}) {
   return new Promise((resolve) => {
     const res = {
       code: 200,
@@ -62,7 +64,7 @@ function call(handler, method, body, token = 'secret') {
       setHeader() {},
       json(data) { resolve({ status: this.code, data }); },
     };
-    handler({ method, headers: { authorization: `Bearer ${token}` }, body }, res);
+    handler({ method, headers: { authorization: `Bearer ${token}` }, body, query }, res);
   });
 }
 
@@ -138,4 +140,20 @@ test('tokens envoyés par le Mac, puis statistiques', async () => {
   assert.equal(st.days.at(-1).day, day);
   assert.deepEqual(st.models.map((m) => m.model), ['Sonnet 4.5', 'Opus 5.5']);
   assert.equal((await call(api.tokens, 'POST', { sessions: [] })).status, 400);
+});
+
+test('vue détaillée d’une session', async () => {
+  const sid = 'detail-1';
+  await call(api.hook, 'POST', { e: 'UserPromptSubmit', sid, project: 'App' });
+  await call(api.hook, 'POST', { e: 'PreToolUse', sid, tool: 'Agent', detail: 'Audit sécurité' });
+  await call(api.hook, 'POST', { e: 'SubagentStart', sid, agentId: 'x', agentType: 'general-purpose' });
+  const day = (await import('../lib/store.js')).day(Date.now());
+  await call(api.tokens, 'POST', { sessions: [{ sid, days: { [day]: { 'claude-opus-5-5': [0, 1_000_000, 0, 0, 0] } } }] });
+  const r = await call(api.session, 'GET', null, 'secret', { sid });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.session.project, 'App');
+  assert.equal(r.data.agents[0].description, 'Audit sécurité');
+  assert.equal(r.data.tokens.costUsd, 20);
+  assert.equal((await call(api.session, 'GET', null, 'secret', { sid: 'inconnue' })).status, 404);
+  assert.equal((await call(api.session, 'GET', null, 'secret', {})).status, 400);
 });

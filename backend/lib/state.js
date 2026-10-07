@@ -82,6 +82,35 @@ export function newSession(ev, now) {
   };
 }
 
+const MAX_LOG = 15;
+const MAX_DONE_AGENTS = 6;
+
+/** Ajoute une ligne au journal d'activité (sans répéter la précédente). */
+function log(s, now, text) {
+  if (!text) return;
+  s.log = s.log ?? [];
+  if (s.log.at(-1)?.text === text) return;
+  s.log.push({ t: Math.floor(now / 1000), text });
+  if (s.log.length > MAX_LOG) s.log.splice(0, s.log.length - MAX_LOG);
+}
+
+/** Les anciennes sessions stockaient seulement le type de l'agent. */
+function agentOf(s, id, type, now) {
+  const a = s.agents[id];
+  if (a && typeof a === 'object') return a;
+  s.agents[id] = { type: (typeof a === 'string' ? a : type) || 'agent', description: '', activity: '', startedAt: now };
+  return s.agents[id];
+}
+
+function finishAgents(s, now) {
+  for (const [id, a] of Object.entries(s.agents ?? {})) {
+    const agent = typeof a === 'object' ? a : { type: a, description: '', startedAt: now };
+    s.agentsDone = [{ id, type: agent.type, description: agent.description, startedAt: agent.startedAt, endedAt: now }, ...(s.agentsDone ?? [])]
+      .slice(0, MAX_DONE_AGENTS);
+  }
+  s.agents = {};
+}
+
 /** Applique un événement de hook à l'état d'une session et renvoie le nouvel état. */
 export function applyEvent(prev, ev, now) {
   const s = structuredClone(prev ?? newSession(ev, now));
@@ -98,22 +127,37 @@ export function applyEvent(prev, ev, now) {
       if (!ACTIVE.has(before)) {
         s.turnStartedAt = now;
         s.progressStartedAt = null;
+        s.agentsDone = [];
         // Une liste entièrement terminée appartient au tour précédent.
         if (s.todos && s.todos.done >= s.todos.total) s.todos = null;
         if (Object.values(s.tasks ?? {}).every((t) => t.done)) s.tasks = {};
       }
+      log(s, now, 'Nouvelle demande');
       break;
 
     case 'PreToolUse':
-    case 'PostToolUse':
+    case 'PostToolUse': {
+      const label = toolLabel(ev.tool, ev.detail);
       s.status = 'running';
-      s.activity = toolLabel(ev.tool, ev.detail);
-      if (ev.todos && !ev.agentId) {
-        s.todos = summarizeTodos(ev.todos);
-        if (!s.progressStartedAt && s.todos.total > 0) s.progressStartedAt = now;
+      s.activity = label;
+      if (ev.agentId) {
+        // Outil appelé par un sous-agent : on note ce qu'il fait.
+        const a = agentOf(s, ev.agentId, ev.agentType, now);
+        a.activity = label;
+      } else {
+        if (ev.todos) {
+          s.todos = summarizeTodos(ev.todos);
+          if (!s.progressStartedAt && s.todos.total > 0) s.progressStartedAt = now;
+        }
+        // La description donnée au sous-agent arrive avant son démarrage : on la garde de côté.
+        if ((ev.tool === 'Agent' || ev.tool === 'Task') && ev.detail) {
+          s.pendingAgents = [...(s.pendingAgents ?? []), ev.detail].slice(-10);
+        }
+        log(s, now, label);
       }
       if (ev.workflow) s.workflow = ev.workflow;
       break;
+    }
 
     case 'TaskCreated':
       if (ev.taskId) s.tasks[ev.taskId] = { subject: ev.taskSubject || '', done: false };
@@ -122,21 +166,36 @@ export function applyEvent(prev, ev, now) {
 
     case 'TaskCompleted':
       if (ev.taskId) s.tasks[ev.taskId] = { subject: ev.taskSubject || s.tasks[ev.taskId]?.subject || '', done: true };
+      log(s, now, ev.taskSubject ? `Étape terminée : ${ev.taskSubject}` : 'Étape terminée');
       break;
 
     case 'SubagentStart':
-      if (ev.agentId) s.agents[ev.agentId] = ev.agentType || 'agent';
+      if (ev.agentId) {
+        const a = agentOf(s, ev.agentId, ev.agentType, now);
+        a.type = ev.agentType || a.type;
+        a.startedAt = now;
+        a.description = a.description || (s.pendingAgents ?? []).shift() || '';
+        a.activity = a.activity || 'Démarre…';
+        log(s, now, `Sous-agent ${a.type}${a.description ? ` : ${a.description}` : ''}`);
+      }
       if (s.status !== 'waiting') s.status = 'running';
       break;
 
     case 'SubagentStop':
-      if (ev.agentId) delete s.agents[ev.agentId];
+      if (ev.agentId && s.agents[ev.agentId]) {
+        const a = agentOf(s, ev.agentId, ev.agentType, now);
+        s.agentsDone = [{ id: ev.agentId, type: a.type, description: a.description, startedAt: a.startedAt, endedAt: now }, ...(s.agentsDone ?? [])]
+          .slice(0, MAX_DONE_AGENTS);
+        delete s.agents[ev.agentId];
+        log(s, now, `Sous-agent ${a.type} terminé`);
+      }
       break;
 
     case 'Notification':
       if (NEEDS_INPUT.has(ev.ntype)) {
         s.status = 'waiting';
         s.activity = translateNotification(ev);
+        log(s, now, s.activity);
       }
       break;
 
@@ -151,8 +210,9 @@ export function applyEvent(prev, ev, now) {
       } else {
         s.status = 'done';
         s.activity = 'Terminé';
-        s.agents = {};
+        finishAgents(s, now);
       }
+      log(s, now, s.activity);
       break;
     }
 
@@ -160,12 +220,14 @@ export function applyEvent(prev, ev, now) {
       s.status = 'error';
       s.error = ev.error || 'erreur API';
       s.activity = `Erreur : ${s.error}`;
+      log(s, now, s.activity);
       break;
 
     case 'SessionEnd':
       s.status = 'done';
       s.activity = 'Session fermée';
-      s.agents = {};
+      finishAgents(s, now);
+      log(s, now, s.activity);
       break;
 
     default:
@@ -185,12 +247,13 @@ export function summarizeTodos(todos) {
   const total = todos.length;
   const done = todos.filter((t) => t.s === 'completed').length;
   const current = todos.find((t) => t.s === 'in_progress')?.c ?? '';
-  return { done, total, current };
+  const items = todos.slice(0, 30).map((t) => ({ text: t.c ?? '', status: t.s ?? 'pending' }));
+  return { done, total, current, items };
 }
 
 /** Progression : la liste TodoWrite si elle existe, sinon les tâches TaskCreated/TaskCompleted. */
 export function progress(s) {
-  if (s.todos && s.todos.total > 0) return s.todos;
+  if (s.todos && s.todos.total > 0) return { done: s.todos.done, total: s.todos.total, current: s.todos.current };
   const tasks = Object.values(s.tasks ?? {});
   if (tasks.length === 0) return { done: 0, total: 0, current: '' };
   const done = tasks.filter((t) => t.done).length;
@@ -266,3 +329,46 @@ export function publicSession(snap, usage, now) {
 }
 
 const round2 = (n) => Math.round(n * 100) / 100;
+
+/** Toutes les étapes, pour la vue détaillée d'une session. */
+export function steps(s) {
+  if (s.todos?.items?.length) return s.todos.items;
+  const tasks = Object.values(s.tasks ?? {});
+  const firstOpen = tasks.findIndex((t) => !t.done);
+  return tasks.map((t, i) => ({ text: t.subject, status: t.done ? 'completed' : i === firstOpen ? 'in_progress' : 'pending' }));
+}
+
+/** Vue détaillée d'une session (⚠️ clés = SessionDetail côté Swift). */
+export function sessionDetail(s, tokens, now) {
+  const base = publicSession(snapshot(s), s.usage, now);
+  const sec = (ms) => Math.floor(ms / 1000);
+  const running = Object.entries(s.agents ?? {}).map(([id, a]) => {
+    const agent = typeof a === 'object' ? a : { type: a, description: '', activity: '', startedAt: s.turnStartedAt };
+    return {
+      id,
+      type: agent.type || 'agent',
+      description: agent.description || '',
+      activity: agent.activity || '',
+      status: 'running',
+      startedAt: sec(agent.startedAt ?? now),
+      endedAt: null,
+    };
+  });
+  const done = (s.agentsDone ?? []).map((a) => ({
+    id: a.id,
+    type: a.type || 'agent',
+    description: a.description || '',
+    activity: '',
+    status: 'done',
+    startedAt: sec(a.startedAt ?? now),
+    endedAt: sec(a.endedAt ?? now),
+  }));
+  return {
+    session: base,
+    steps: steps(s),
+    agents: [...running, ...done],
+    workflow: s.workflow ? { name: s.workflow.name ?? '', phases: s.workflow.phases ?? [] } : null,
+    log: [...(s.log ?? [])].reverse().map((l) => ({ at: l.t, text: l.text })),
+    tokens,
+  };
+}

@@ -103,3 +103,12 @@ export async function readTokens() {
   }
   return out;
 }
+
+export async function readSessionTokens(sid) {
+  const v = await redis('HGET', 'tokens', sid);
+  try {
+    return v ? JSON.parse(v) : null;
+  } catch {
+    return null;
+  }
+}
