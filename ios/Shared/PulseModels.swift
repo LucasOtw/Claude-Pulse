@@ -12,6 +12,25 @@ struct PulseState: Codable {
     struct Limits: Codable {
         var fiveHour: Limit?
         var sevenDay: Limit?
+        /// Secondes Unix du dernier relevé (les limites ne bougent que quand Claude Code tourne)
+        var updatedAt: Double?
+
+        var updatedDate: Date? { updatedAt.map { Date(timeIntervalSince1970: $0) } }
+        /// Plus d'une heure sans relevé : le chiffre est peut-être dépassé.
+        var isOld: Bool { updatedDate.map { Date().timeIntervalSince($0) > 3600 } ?? false }
+    }
+
+    /// Demande d'autorisation en attente (validation à distance).
+    struct Approval: Codable, Identifiable, Equatable {
+        var id: String
+        var sid: String
+        var project: String
+        var tool: String
+        var text: String
+        var note: String
+        /// Commande sensible : ne s'autorise que sur le Mac
+        var danger: Bool
+        var createdAt: Double
     }
 
     struct Today: Codable {
@@ -34,6 +53,8 @@ struct PulseState: Codable {
         var contextPct: Int
         var model: String?
         var duration: String
+        /// Première phrase de la réponse de Claude à la fin (si activé sur le Mac)
+        var summary: String?
         /// Temps restant estimé en secondes, -1 si inconnu
         var etaSeconds: Int?
         /// Secondes Unix
@@ -48,8 +69,14 @@ struct PulseState: Codable {
     var limits: Limits
     var today: Today
     var sessions: [Session]
+    var approvals: [Approval]?
+    /// Validation à distance allumée
+    var remote: Bool?
+    /// Notifications envoyées par le serveur via ntfy (l'app n'en envoie alors pas en double)
+    var ntfy: Bool?
 
     var activeSessions: [Session] { sessions.filter(\.isActive) }
+    var pendingApprovals: [Approval] { approvals ?? [] }
 
     static let preview = PulseState(
         updatedAt: Date().timeIntervalSince1970,
@@ -107,11 +134,21 @@ struct PulseStats: Codable {
         var id: String { model }
     }
 
+    struct Project: Codable, Identifiable {
+        var project: String
+        var weekTokens: Int
+        var weekCostUsd: Double
+        var tokens: Int
+        var costUsd: Double
+        var id: String { project }
+    }
+
     var since: String?
     var totals: Totals
     var periods: Periods
     var days: [Day]
     var models: [Model]
+    var projects: [Project]?
     var sessions: Int
 
     var sinceDate: Date? { since.flatMap { PulseStats.dayFormatter.date(from: $0) } }

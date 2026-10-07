@@ -69,8 +69,16 @@ struct ContentView: View {
             )
         }
 
+        ForEach(monitor.state?.pendingApprovals ?? []) { approval in
+            ApprovalCard(approval: approval)
+        }
+
         Button { showDetail = true } label: {
-            LimitHero(limit: monitor.state?.limits.fiveHour)
+            LimitHero(
+                limit: monitor.state?.limits.fiveHour,
+                updated: monitor.state?.limits.updatedDate,
+                isOld: monitor.state?.limits.isOld ?? false
+            )
         }
         .buttonStyle(.plain)
         .accessibilityHint("Ouvre le détail de ton utilisation")
@@ -82,6 +90,7 @@ struct ContentView: View {
         }
 
         MonitorCTA()
+        RemoteApprovalRow()
 
         if let error = monitor.lastError {
             NoticeCard(symbol: "exclamationmark.triangle", text: error, tint: PulseStyle.critical)
@@ -267,6 +276,9 @@ extension View {
 /// La limite 5 h en grand : chiffre en serif, piste, heure de remise à zéro.
 struct LimitHero: View {
     let limit: PulseState.Limit?
+    var updated: Date? = nil
+    /// Relevé de plus d'une heure : chiffre grisé
+    var isOld: Bool = false
 
     var body: some View {
         let pct = limit?.pct
@@ -274,7 +286,7 @@ struct LimitHero: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(pct.map { "\(Int($0.rounded()))" } ?? "—")
                     .font(.system(size: 56, weight: .regular, design: .serif).monospacedDigit())
-                    .foregroundStyle(PulseStyle.textPrimary)
+                    .foregroundStyle(isOld ? PulseStyle.textTertiary : PulseStyle.textPrimary)
                     .contentTransition(.numericText())
                 Text(pct == nil ? "" : "%")
                     .font(.system(size: 26, weight: .regular, design: .serif))
@@ -291,6 +303,7 @@ struct LimitHero: View {
             }
 
             LimitTrack(pct: pct, color: pct.map { PulseStyle.gauge($0) } ?? PulseStyle.textTertiary)
+                .opacity(isOld ? 0.45 : 1)
 
             HStack {
                 Text("Limite 5 heures")
@@ -304,6 +317,12 @@ struct LimitHero: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(PulseStyle.textTertiary)
             }
+
+            if let updated {
+                Label(freshness(updated), systemImage: isOld ? "clock.badge.exclamationmark" : "clock")
+                    .font(.caption)
+                    .foregroundStyle(isOld ? PulseStyle.warn : PulseStyle.textTertiary)
+            }
         }
         .padding(18)
         .background(PulseStyle.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -311,6 +330,12 @@ struct LimitHero: View {
         .sensoryFeedback(trigger: PulseHaptics.level(limit?.pct)) { (old: Int, new: Int) -> SensoryFeedback? in
             old >= 0 && new > old ? .warning : nil
         }
+    }
+
+    private func freshness(_ date: Date) -> String {
+        let time = PulseStyle.clock(date)
+        let when = Calendar.current.isDateInToday(date) ? "à \(time)" : "le \(PulseStyle.shortDate(date)) à \(time)"
+        return isOld ? "Relevé \(when) · lance Claude Code pour l'actualiser" : "Relevé \(when)"
     }
 
     private func levelLabel(_ pct: Double) -> String {
@@ -443,6 +468,118 @@ struct MonitorCTA: View {
             await action()
             busy = false
         }
+    }
+}
+
+// MARK: - Validation à distance
+
+/// « Je suis loin du Mac » : les demandes d'autorisation de Claude arrivent ici.
+struct RemoteApprovalRow: View {
+    @EnvironmentObject private var monitor: LiveMonitor
+    @State private var pending: Bool?
+
+    private var isOn: Bool { pending ?? (monitor.state?.remote ?? false) }
+
+    var body: some View {
+        RowGroup {
+            HStack(spacing: 12) {
+                RowIcon(symbol: isOn ? "hand.raised.fill" : "hand.raised", color: isOn ? PulseStyle.warn : PulseStyle.textPrimary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Valider depuis l'iPhone")
+                        .foregroundStyle(PulseStyle.textPrimary)
+                    Text(isOn
+                         ? "Claude attend ta réponse ici (3 min max), puis le terminal reprend. S'éteint seule dans 12 h."
+                         : "À allumer quand tu t'éloignes du Mac.")
+                        .font(.caption)
+                        .foregroundStyle(PulseStyle.textSecondary)
+                }
+                Spacer()
+                Toggle("Valider depuis l'iPhone", isOn: Binding(
+                    get: { isOn },
+                    set: { on in
+                        pending = on
+                        Task {
+                            await monitor.setRemote(on)
+                            pending = nil
+                        }
+                    }
+                ))
+                .labelsHidden()
+                .tint(PulseStyle.peach)
+                .disabled(!PulseConfig.isConfigured)
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+        }
+        .sensoryFeedback(.impact(weight: .medium), trigger: isOn)
+    }
+}
+
+/// Demande d'autorisation en attente, avec ses boutons.
+struct ApprovalCard: View {
+    @EnvironmentObject private var monitor: LiveMonitor
+    let approval: PulseState.Approval
+    @State private var sending = false
+    @State private var answers = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "hand.raised.fill").foregroundStyle(PulseStyle.warn)
+                Text("Autoriser \(approval.tool) ?")
+                    .font(.system(size: 20, weight: .regular, design: .serif))
+                    .foregroundStyle(PulseStyle.textPrimary)
+                Spacer()
+                Text(approval.project)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(PulseStyle.textSecondary)
+            }
+            if !approval.note.isEmpty {
+                Text(approval.note)
+                    .font(.subheadline)
+                    .foregroundStyle(PulseStyle.textSecondary)
+            }
+            Text(approval.text)
+                .font(.system(.callout, design: .monospaced))
+                .foregroundStyle(PulseStyle.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(PulseStyle.cardRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .textSelection(.enabled)
+            if approval.danger {
+                Label("Commande sensible : elle ne peut être autorisée que sur le Mac.", systemImage: "exclamationmark.shield")
+                    .font(.caption)
+                    .foregroundStyle(PulseStyle.warn)
+            }
+            HStack(spacing: 10) {
+                answer("Refuser", allow: false)
+                if !approval.danger { answer("Autoriser", allow: true) }
+            }
+        }
+        .padding(16)
+        .background(PulseStyle.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(PulseStyle.warn.opacity(0.6), lineWidth: 1.5))
+        .sensoryFeedback(.impact(weight: .medium), trigger: answers)
+    }
+
+    private func answer(_ title: String, allow: Bool) -> some View {
+        Button {
+            answers += 1
+            sending = true
+            Task {
+                await monitor.decide(approval, allow: allow)
+                sending = false
+            }
+        } label: {
+            Text(title)
+                .font(.body.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .foregroundStyle(allow ? Color.white : PulseStyle.textPrimary)
+                .background(allow ? PulseStyle.peach : PulseStyle.cardRaised, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(sending)
     }
 }
 

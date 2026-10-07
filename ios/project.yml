@@ -3,6 +3,8 @@
 name: ClaudePulse
 options:
   bundleIdPrefix: com.lucasotw
+  # Français : nécessaire pour que Siri comprenne « Où en est Claude Pulse ».
+  developmentLanguage: fr
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true

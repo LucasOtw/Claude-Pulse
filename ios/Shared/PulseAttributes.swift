@@ -28,6 +28,14 @@ struct PulseAttributes: ActivityAttributes {
         var otherActive: Int
         /// Apparence choisie dans l'app : "dark", "light" ou "auto"
         var theme: String
+        /// Demande d'autorisation en attente (validation à distance), "" sinon
+        var approvalId: String = ""
+        var approvalTitle: String = ""
+        var approvalText: String = ""
+        /// Commande sensible : seul « Refuser » est proposé
+        var approvalDanger: Bool = false
+
+        var hasApproval: Bool { !approvalId.isEmpty }
     }
 
     var name: String

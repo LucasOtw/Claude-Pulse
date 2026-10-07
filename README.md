@@ -90,6 +90,24 @@ Une seule commande, puis ⌘R dans Xcode :
 
 Elle récupère la dernière version, met à jour les scripts Claude Code, régénère le projet Xcode en gardant ton équipe de signature et l'ouvre. Le backend se redéploie tout seul sur Vercel à chaque push sur `main`.
 
+### Options
+
+**Notifications même app fermée (ntfy, gratuit).** Installe l'app **ntfy** sur l'iPhone, choisis un nom de sujet impossible à deviner (`openssl rand -hex 12`), abonne-toi à ce sujet dans ntfy, puis ajoute `NTFY_TOPIC` avec ce nom dans les variables Vercel et redéploie. Le serveur envoie alors lui-même : validation demandée, tâche terminée, erreur, limite 5 h à 80 % et remise à zéro (programmée à l'avance chez ntfy). Elles arrivent aussi sur l'Apple Watch. L'app n'envoie plus ses propres notifications pour éviter les doublons.
+
+**Valider depuis l'iPhone.** Interrupteur « Valider depuis l'iPhone » dans l'app, à allumer quand tu t'éloignes du Mac. Quand Claude Code demande une autorisation, la demande s'affiche dans l'app et sur la Live Activity (boutons Autoriser / Refuser). Garde-fous :
+- éteint, rien ne change : le terminal pose sa question comme d'habitude ;
+- allumé, Claude attend ta réponse 3 minutes au plus, puis le terminal reprend la main ;
+- les commandes sensibles (`rm -rf`, `sudo`, `git push --force`, `git reset --hard`, `curl … | sh`, `npm publish`…) ne peuvent jamais être autorisées depuis le téléphone, seulement refusées ;
+- l'interrupteur s'éteint tout seul au bout de 12 h ;
+- seuls l'outil et la commande / le fichier / l'URL partent, jamais le contenu d'un fichier.
+Pour désactiver complètement : `PULSE_REMOTE_APPROVAL=0` dans `~/.claude/claude-pulse/config`.
+
+**Résumé de fin de tâche.** Avec `PULSE_SUMMARY=1` dans `~/.claude/claude-pulse/config`, la notification « terminé » contient la première phrase de la réponse de Claude. Désactivé par défaut, puisque ça envoie un bout de texte au serveur.
+
+**Fuseau horaire.** Les jours (coût et tokens du jour) sont comptés à l'heure de Paris. Pour un autre fuseau : variable `PULSE_TZ` dans Vercel (par exemple `America/Montreal`).
+
+**Siri.** « Dis Siri, où en est Claude Pulse ? », « Dis Siri, limite de Claude Pulse ». Aussi disponibles dans l'app Raccourcis.
+
 ---
 
 ## Ce que voit l'iPhone
@@ -126,8 +144,11 @@ Chaque lecture de l'iPhone coûte 5 commandes Redis, chaque événement du Mac e
 ## Développement
 
 ```bash
-cd backend && npm test   # machine à états + test de bout en bout (faux Redis)
+cd backend && npm test   # serveur : machine à états, alertes, validation, bout en bout (faux Redis, faux ntfy)
+./mac/test.sh            # scripts Mac (faux serveur local)
 ```
+
+Les deux tournent automatiquement sur GitHub à chaque modification (`.github/workflows/ci.yml`).
 
 ```
 backend/
@@ -135,9 +156,16 @@ backend/
   api/usage.js    relevés de la status line
   api/state.js    lu par l'app et le widget (1 requête Redis)
   api/tokens.js   tokens par session, calculés sur le Mac
+  api/approval.js demandes d'autorisation (côté Mac)
+  api/decide.js   réponse depuis l'iPhone
+  api/remote.js   interrupteur de validation à distance
+  api/session.js  détail d'une session
   api/stats.js    vue détaillée : tokens et équivalent API
   lib/state.js    machine à états (pure, testée)
   lib/pricing.js  tarifs publics de l'API par modèle
+  lib/alerts.js   quelles notifications envoyer
+  lib/approval.js garde-fous de la validation à distance
+  lib/notify.js   envoi via ntfy
   lib/stats.js    agrégats par jour, période et modèle
   lib/store.js    clés Redis
   lib/redis.js    Upstash REST, sans dépendance
@@ -151,5 +179,7 @@ mac/
   hook.sh  statusline.sh  install.sh  uninstall.sh
   tokens.sh  tokens.jq     tokens d'une session (lus dans son transcript)
   backfill.sh              envoie l'historique encore présent sur le Mac
+  approve.sh               validation à distance (hook PermissionRequest)
+  test.sh                  tests des scripts
 update.sh         met tout à jour sur le Mac
 ```

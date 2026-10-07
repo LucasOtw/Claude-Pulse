@@ -26,6 +26,8 @@ final class LiveMonitor: ObservableObject {
     private var lastContent: PulseAttributes.ContentState?
     private var lastPushed = Date.distantPast
     private var resuming = false
+    private var knownApprovals = Set<String>()
+    private var seededApprovals = false
 
     // MARK: Démarrer / arrêter
 
@@ -120,9 +122,11 @@ final class LiveMonitor: ObservableObject {
     /// Rafraîchit l'écran de l'app sans lancer la surveillance.
     func refresh() async {
         do {
-            state = try await PulseAPI.fetchState()
+            let fresh = try await PulseAPI.fetchState()
+            state = fresh
             lastUpdate = Date()
             lastError = nil
+            handle(fresh)
         } catch {
             lastError = error.localizedDescription
         }
@@ -145,7 +149,7 @@ final class LiveMonitor: ObservableObject {
             state = fresh
             lastUpdate = Date()
             lastError = nil
-            if notifyTransitions(fresh) { WidgetCenter.shared.reloadAllTimelines() }
+            handle(fresh)
             await push(Self.content(from: fresh))
             return fresh.activeSessions.isEmpty ? idleInterval : activeInterval
         } catch {
@@ -186,11 +190,13 @@ final class LiveMonitor: ObservableObject {
     @discardableResult
     private func notifyTransitions(_ fresh: PulseState) -> Bool {
         var changed = false
+        let local = fresh.ntfy != true // sinon le serveur envoie déjà ces notifications via ntfy
         for s in fresh.sessions {
             let previous = knownStatus[s.sid]
             knownStatus[s.sid] = s.status
             guard previous != s.status else { continue }
             changed = true
+            guard local else { continue }
             switch s.status {
             case "waiting":
                 Notifier.send(title: "\(s.project) attend ta validation", body: s.activity)
@@ -199,7 +205,8 @@ final class LiveMonitor: ObservableObject {
                 guard let previous, ["running", "waiting", "background"].contains(previous),
                       s.updatedAt - s.startedAt >= 30 else { continue }
                 if s.status == "done" {
-                    Notifier.send(title: "\(s.project) : terminé ✅", body: "En \(s.duration)")
+                    let summary = s.summary.map { "\($0)\n" } ?? ""
+                    Notifier.send(title: "\(s.project) : terminé ✅", body: "\(summary)En \(s.duration)")
                 } else {
                     Notifier.send(title: "\(s.project) : erreur", body: s.activity)
                 }
@@ -208,6 +215,65 @@ final class LiveMonitor: ObservableObject {
             }
         }
         return changed
+    }
+
+    /// Limite 5 h à 80 % : notification tout de suite, et une autre programmée à la remise à zéro
+    /// (iOS la délivre même si l'app est fermée entre-temps). Une seule fois par fenêtre.
+    private func limitAlerts(_ fresh: PulseState) {
+        guard fresh.ntfy != true, let limit = fresh.limits.fiveHour, limit.pct >= 80 else { return }
+        let key = "alert80-\(Int(limit.resetsAt))"
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: key) else { return }
+        defaults.set(true, forKey: key)
+        Notifier.send(title: "Limite 5 h à \(Int(limit.pct.rounded())) %", body: "Remise à zéro à \(PulseStyle.clock(limit.resetDate)).")
+        Notifier.schedule(
+            id: "reset-\(Int(limit.resetsAt))",
+            title: "Limite 5 h remise à zéro",
+            body: "Tu peux relancer Claude.",
+            at: limit.resetDate
+        )
+    }
+
+    /// Nouvelle demande d'autorisation (validation à distance) : notification locale.
+    private func approvalAlerts(_ fresh: PulseState) {
+        let pending = fresh.pendingApprovals
+        defer { knownApprovals = Set(pending.map(\.id)) }
+        guard fresh.ntfy != true, !knownApprovals.isEmpty || seededApprovals else {
+            seededApprovals = true
+            return
+        }
+        for a in pending where !knownApprovals.contains(a.id) {
+            Notifier.send(title: "\(a.project) : autoriser \(a.tool) ?", body: a.text)
+        }
+    }
+
+    /// Tout ce qu'un relevé déclenche, que la surveillance tourne ou non.
+    private func handle(_ fresh: PulseState) {
+        if notifyTransitions(fresh) { WidgetCenter.shared.reloadAllTimelines() }
+        limitAlerts(fresh)
+        approvalAlerts(fresh)
+    }
+
+    // MARK: Validation à distance
+
+    func decide(_ approval: PulseState.Approval, allow: Bool) async {
+        do {
+            try await PulseAPI.decide(id: approval.id, allow: allow)
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+        if isRunning { await tick() } else { await refresh() }
+    }
+
+    func setRemote(_ on: Bool) async {
+        do {
+            try await PulseAPI.setRemote(on)
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+        if isRunning { await tick() } else { await refresh() }
     }
 
     // MARK: Contenu de la Live Activity
@@ -226,8 +292,14 @@ final class LiveMonitor: ObservableObject {
     static func content(from state: PulseState?) -> PulseAttributes.ContentState {
         let fiveHour = state?.limits.fiveHour.map { Int($0.pct.rounded()) } ?? -1
         let resetsAt = state?.limits.fiveHour?.resetsAt ?? 0
+        let approval = state?.pendingApprovals.first
         guard let state, let s = focus(state.sessions) else {
-            return .idle(fiveHourPct: fiveHour, fiveHourResetsAt: resetsAt)
+            var idle = PulseAttributes.ContentState.idle(fiveHourPct: fiveHour, fiveHourResetsAt: resetsAt)
+            idle.approvalId = approval?.id ?? ""
+            idle.approvalTitle = approval.map { "\($0.project) · \($0.tool)" } ?? ""
+            idle.approvalText = approval?.text ?? ""
+            idle.approvalDanger = approval?.danger ?? false
+            return idle
         }
         return PulseAttributes.ContentState(
             project: s.project,
@@ -244,7 +316,11 @@ final class LiveMonitor: ObservableObject {
             startedAt: s.startedAt,
             duration: s.duration,
             otherActive: state.activeSessions.filter { $0.sid != s.sid }.count,
-            theme: PulseConfig.activityTheme.rawValue
+            theme: PulseConfig.activityTheme.rawValue,
+            approvalId: approval?.id ?? "",
+            approvalTitle: approval.map { "\($0.project) · \($0.tool)" } ?? "",
+            approvalText: approval?.text ?? "",
+            approvalDanger: approval?.danger ?? false
         )
     }
 }

@@ -27,6 +27,7 @@ struct UsageDetailView: View {
                     apiSection(stats)
                     chartSection(stats)
                     tokensSection(stats)
+                    if let projects = stats.projects, !projects.isEmpty { projectsSection(projects) }
                     if !stats.models.isEmpty { modelsSection(stats) }
                     Footnote(
                         "Estimation au tarif public de l'API, pour comparer avec ton abonnement : ce n'est pas ce que tu paies. "
@@ -169,6 +170,44 @@ struct UsageDetailView: View {
                 InfoRow(symbol: "square.and.arrow.down", title: "Mis en cache", value: PulseStyle.tokens(s.totals.cacheWrite))
                 RowDivider()
                 InfoRow(symbol: "bolt", title: "Relus depuis le cache", value: PulseStyle.tokens(s.totals.cacheRead))
+            }
+        }
+    }
+
+    private func projectsSection(_ projects: [PulseStats.Project]) -> some View {
+        let top = Array(projects.prefix(8))
+        let maxWeek = max(top.map(\.weekTokens).max() ?? 0, 1)
+        return VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(title: "Par projet · 7 jours")
+            RowGroup {
+                ForEach(Array(top.enumerated()), id: \.element.id) { index, p in
+                    if index > 0 { RowDivider() }
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 12) {
+                            RowIcon(symbol: "folder")
+                            Text(p.project)
+                                .foregroundStyle(PulseStyle.textPrimary)
+                                .lineLimit(1)
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text(PulseStyle.tokens(p.weekTokens))
+                                    .monospacedDigit()
+                                    .foregroundStyle(PulseStyle.textPrimary)
+                                Text("\(PulseStyle.dollars(p.weekCostUsd, decimals: 0)) · \(PulseStyle.tokens(p.tokens)) au total")
+                                    .font(.caption)
+                                    .foregroundStyle(PulseStyle.textSecondary)
+                            }
+                        }
+                        Capsule()
+                            .fill(PulseStyle.peach.opacity(0.8))
+                            .frame(height: 4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .scaleEffect(x: CGFloat(p.weekTokens) / CGFloat(maxWeek), y: 1, anchor: .leading)
+                            .padding(.leading, 36)
+                    }
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 16)
+                }
             }
         }
     }

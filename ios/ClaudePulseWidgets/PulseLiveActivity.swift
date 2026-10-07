@@ -12,6 +12,8 @@ struct PulseLiveActivity: Widget {
         } dynamicIsland: { context in
             let state = context.state
             let color = PulseStyle.color(for: state.status)
+            let symbol = state.hasApproval ? "hand.raised.fill" : PulseStyle.symbol(for: state.status)
+            let tint: Color = state.hasApproval ? PulseStyle.warn : color
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     Brand(project: nil)
@@ -27,43 +29,62 @@ struct PulseLiveActivity: Widget {
                         .padding(.top, 2)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Headline(state: state, size: 19)
-                        Subline(state: state)
-                        if state.stepsTotal > 0 {
-                            SegmentedBar(done: state.stepsDone, total: state.stepsTotal)
-                        }
-                        LimitRow(state: state)
+                    if state.hasApproval {
+                        ApprovalBlock(state: state, compact: true)
+                            .padding(.horizontal, 6)
+                            .environment(\.colorScheme, .dark)
+                    } else {
+                        tracking(state)
                     }
-                    .padding(.horizontal, 6)
-                    .environment(\.colorScheme, .dark)
                 }
             } compactLeading: {
-                Image(systemName: PulseStyle.symbol(for: state.status))
+                Image(systemName: symbol)
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(color)
+                    .foregroundStyle(tint)
             } compactTrailing: {
-                if let end = state.estimatedEnd {
-                    Text(timerInterval: Date.now...max(end, Date.now), countsDown: true, showsHours: false)
-                        .font(.caption.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(color)
-                        .frame(maxWidth: 44)
-                } else if state.fiveHourPct >= 0 {
-                    Text("\(state.fiveHourPct)%")
-                        .font(.caption.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(PulseStyle.gauge(Double(state.fiveHourPct)))
-                }
+                compactTrailing(state, color: color)
             } minimal: {
                 ZStack {
                     RingGauge(pct: state.fiveHourPct >= 0 ? Double(state.fiveHourPct) : nil, lineWidth: 3)
-                    Image(systemName: PulseStyle.symbol(for: state.status))
+                    Image(systemName: symbol)
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(color)
+                        .foregroundStyle(tint)
                 }
                 .padding(2)
                 .environment(\.colorScheme, .dark)
             }
-            .keylineTint(color)
+            .keylineTint(tint)
+        }
+    }
+
+    private func tracking(_ state: PulseAttributes.ContentState) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Headline(state: state, size: 19)
+            Subline(state: state)
+            if state.stepsTotal > 0 {
+                SegmentedBar(done: state.stepsDone, total: state.stepsTotal)
+            }
+            LimitRow(state: state)
+        }
+        .padding(.horizontal, 6)
+        .environment(\.colorScheme, .dark)
+    }
+
+    @ViewBuilder
+    private func compactTrailing(_ state: PulseAttributes.ContentState, color: Color) -> some View {
+        if state.hasApproval {
+            Text("?")
+                .font(.caption.weight(.heavy))
+                .foregroundStyle(PulseStyle.warn)
+        } else if let end = state.estimatedEnd {
+            Text(timerInterval: Date.now...max(end, Date.now), countsDown: true, showsHours: false)
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(color)
+                .frame(maxWidth: 44)
+        } else if state.fiveHourPct >= 0 {
+            Text("\(state.fiveHourPct)%")
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(PulseStyle.gauge(Double(state.fiveHourPct)))
         }
     }
 }
@@ -94,6 +115,21 @@ struct LockScreenView: View {
     let isStale: Bool
 
     var body: some View {
+        if state.hasApproval {
+            // Demande d'autorisation : elle prend la place du suivi, la limite reste en bas.
+            VStack(alignment: .leading, spacing: 10) {
+                Brand(project: nil)
+                ApprovalBlock(state: state, compact: false)
+                LimitRow(state: state)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+        } else {
+            tracking
+        }
+    }
+
+    private var tracking: some View {
         VStack(alignment: .leading, spacing: 9) {
             Brand(project: state.project)
 
@@ -127,6 +163,59 @@ struct LockScreenView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
+    }
+}
+
+/// Demande d'autorisation avec ses deux boutons (exécutés sans ouvrir l'app).
+struct ApprovalBlock: View {
+    let state: PulseAttributes.ContentState
+    let compact: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: compact ? 6 : 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "hand.raised.fill")
+                    .foregroundStyle(PulseStyle.warn)
+                Text("Autoriser ?")
+                    .font(.system(size: compact ? 16 : 19, weight: .bold, design: .rounded))
+                    .foregroundStyle(PulseStyle.textPrimary)
+                Text(state.approvalTitle)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(PulseStyle.textSecondary)
+                    .lineLimit(1)
+            }
+            Text(state.approvalText)
+                .font(.system(.footnote, design: .monospaced))
+                .foregroundStyle(PulseStyle.textPrimary)
+                .lineLimit(compact ? 1 : 2)
+            HStack(spacing: 8) {
+                Button(intent: DecideApprovalIntent(approvalID: state.approvalId, allow: false)) {
+                    Text("Refuser")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                        .background(PulseStyle.track, in: Capsule())
+                        .foregroundStyle(PulseStyle.textPrimary)
+                }
+                .buttonStyle(.plain)
+                if state.approvalDanger {
+                    Text("Sensible : à valider sur le Mac")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(PulseStyle.warn)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Button(intent: DecideApprovalIntent(approvalID: state.approvalId, allow: true)) {
+                        Text("Autoriser")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 7)
+                            .background(PulseStyle.peach, in: Capsule())
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 }
 
