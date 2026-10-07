@@ -1,12 +1,5 @@
-// Machine à états d'une session Claude Code.
+// État d'une session Claude Code, reconstruit à partir des événements des hooks.
 // Fonctions pures : aucune I/O ici, tout est testé dans test/state.test.js.
-
-export const DEFAULTS = {
-  // Une Live Activity ne démarre que si la tâche dure plus que ça (évite le spam sur les questions rapides).
-  minTaskSeconds: 30,
-  // Intervalle minimum entre deux push de mise à jour sans changement de statut.
-  minPushSeconds: 5,
-};
 
 const TOOL_LABELS = {
   Edit: 'Modifie des fichiers',
@@ -29,6 +22,12 @@ const TOOL_LABELS = {
   Skill: 'Utilise une compétence',
 };
 
+/** Sans nouvelles pendant ce temps, une session « en cours » est considérée comme arrêtée (Échap ne déclenche pas Stop). */
+export const SILENT_AFTER_MS = 20 * 60 * 1000;
+
+const ACTIVE = new Set(['running', 'waiting', 'background']);
+const NEEDS_INPUT = new Set(['permission_prompt', 'elicitation_dialog', 'elicitation_url_dialog', 'agent_needs_input']);
+
 export function toolLabel(tool) {
   if (!tool) return 'Travaille…';
   if (TOOL_LABELS[tool]) return TOOL_LABELS[tool];
@@ -48,23 +47,14 @@ export function newSession(ev, now) {
     todos: null, // { done, total, current } issu de TodoWrite
     tasks: {}, // id -> { subject, done } issu de TaskCreated / TaskCompleted
     agents: {}, // agentId -> type, sous-agents en cours
-    agentsDone: 0,
     workflow: null, // { name, phases: [] }
-    background: 0,
     error: null,
     usage: { costUsd: 0, contextPct: 0, model: null },
-    la: { started: false, dismissed: false, pendingEnd: false, startedAt: 0, lastPushAt: 0, lastTs: 0, lastKey: '' },
   };
 }
 
-const ACTIVE = new Set(['running', 'waiting', 'background']);
-const NEEDS_INPUT = new Set(['permission_prompt', 'elicitation_dialog', 'elicitation_url_dialog', 'agent_needs_input']);
-
-/**
- * Applique un événement de hook à l'état d'une session.
- * @returns {{ state: object, action: null | { kind: 'start'|'update'|'end', alert?: {title: string, body: string}, priority: 5|10 } }}
- */
-export function applyEvent(prev, ev, now, cfg = DEFAULTS) {
+/** Applique un événement de hook à l'état d'une session et renvoie le nouvel état. */
+export function applyEvent(prev, ev, now) {
   const s = structuredClone(prev ?? newSession(ev, now));
   const before = s.status;
   s.updatedAt = now;
@@ -76,11 +66,7 @@ export function applyEvent(prev, ev, now, cfg = DEFAULTS) {
       s.status = 'running';
       s.activity = 'Réfléchit…';
       s.error = null;
-      if (!ACTIVE.has(before)) {
-        s.turnStartedAt = now;
-        s.agentsDone = 0;
-        s.la.dismissed = false;
-      }
+      if (!ACTIVE.has(before)) s.turnStartedAt = now;
       break;
 
     case 'PreToolUse':
@@ -105,10 +91,7 @@ export function applyEvent(prev, ev, now, cfg = DEFAULTS) {
       break;
 
     case 'SubagentStop':
-      if (ev.agentId && s.agents[ev.agentId]) {
-        delete s.agents[ev.agentId];
-        s.agentsDone += 1;
-      }
+      if (ev.agentId) delete s.agents[ev.agentId];
       break;
 
     case 'Notification':
@@ -119,8 +102,7 @@ export function applyEvent(prev, ev, now, cfg = DEFAULTS) {
       break;
 
     case 'Stop': {
-      const bg = (ev.bg || []).filter((t) => t.status !== 'completed' && t.status !== 'failed' && t.status !== 'killed');
-      s.background = bg.length;
+      const bg = (ev.bg || []).filter((t) => !['completed', 'failed', 'killed'].includes(t.status));
       if (bg.length > 0) {
         s.status = 'background';
         const wf = bg.find((t) => t.type === 'workflow');
@@ -148,41 +130,9 @@ export function applyEvent(prev, ev, now, cfg = DEFAULTS) {
       break;
 
     default:
-      return { state: s, action: null };
+      s.updatedAt = prev?.updatedAt ?? now;
   }
-
-  return { state: s, action: decide(s, before, now, cfg) };
-}
-
-function decide(s, before, now, cfg) {
-  const changed = s.status !== before;
-  const la = s.la;
-
-  if (!la.started) {
-    if (!ACTIVE.has(s.status) || la.dismissed) return null;
-    const longEnough = now - s.turnStartedAt >= cfg.minTaskSeconds * 1000;
-    if (!longEnough && s.status !== 'waiting') return null;
-    return { kind: 'start', priority: 10, alert: alertFor(s, true, now) };
-  }
-
-  if (s.status === 'done' || s.status === 'error') {
-    return { kind: 'end', priority: 10, alert: alertFor(s, false, now) };
-  }
-
-  const key = contentKey(s);
-  if (!changed && key === la.lastKey) return null;
-  if (!changed && now - la.lastPushAt < cfg.minPushSeconds * 1000) return null;
-  const alert = changed && s.status === 'waiting' ? alertFor(s, false, now) : undefined;
-  return { kind: 'update', priority: changed ? 10 : 5, alert };
-}
-
-function alertFor(s, starting, now) {
-  const p = s.project;
-  if (s.status === 'waiting') return { title: `${p} · attend ta validation`, body: s.activity };
-  if (s.status === 'done') return { title: `${p} · terminé ✅`, body: `En ${formatDuration(now - s.turnStartedAt)}` };
-  if (s.status === 'error') return { title: `${p} · erreur`, body: s.activity };
-  if (starting) return { title: `${p} · Claude travaille`, body: s.activity || 'Tâche en cours' };
-  return { title: p, body: s.activity };
+  return s;
 }
 
 export function translateNotification(ev) {
@@ -199,10 +149,10 @@ export function summarizeTodos(todos) {
   return { done, total, current };
 }
 
-/** Progression : la liste TodoWrite si elle existe, sinon les tâches TaskCreate/TaskCompleted. */
+/** Progression : la liste TodoWrite si elle existe, sinon les tâches TaskCreated/TaskCompleted. */
 export function progress(s) {
   if (s.todos && s.todos.total > 0) return s.todos;
-  const tasks = Object.values(s.tasks);
+  const tasks = Object.values(s.tasks ?? {});
   if (tasks.length === 0) return { done: 0, total: 0, current: '' };
   const done = tasks.filter((t) => t.done).length;
   const current = tasks.find((t) => !t.done)?.subject ?? '';
@@ -218,45 +168,8 @@ export function formatDuration(ms) {
   return m ? `${h} h ${String(m).padStart(2, '0')}` : `${h} h`;
 }
 
-/**
- * ContentState envoyé à la Live Activity.
- * ⚠️ Les clés doivent correspondre exactement à PulseAttributes.ContentState côté Swift.
- */
-export function contentState(s, limits, now) {
-  const p = progress(s);
-  return {
-    status: s.status,
-    activity: s.activity || '',
-    currentStep: p.current || '',
-    stepsDone: p.done,
-    stepsTotal: p.total,
-    agents: Object.keys(s.agents).length,
-    workflow: s.workflow?.name ?? '',
-    costUsd: round2(s.usage?.costUsd ?? 0),
-    contextPct: Math.round(s.usage?.contextPct ?? 0),
-    fiveHourPct: limits?.fiveHour ? Math.round(limits.fiveHour.pct) : -1,
-    duration: formatDuration(now - s.turnStartedAt),
-  };
-}
-
-/** Attributs statiques de la Live Activity (PulseAttributes côté Swift). */
-export function attributes(s) {
-  return { sessionId: s.sid, project: s.project, startedAt: Math.floor(s.turnStartedAt / 1000) };
-}
-
-function contentKey(s) {
-  const p = progress(s);
-  return [s.status, s.activity, p.done, p.total, p.current, Object.keys(s.agents).length, s.workflow?.name ?? ''].join('|');
-}
-
-export function markPushed(s, now, ts) {
-  s.la.lastPushAt = now;
-  s.la.lastTs = ts;
-  s.la.lastKey = contentKey(s);
-}
-
-/** Résumé d'une session pour l'app et le widget. */
-export function publicSession(s, now) {
+/** Résumé compact stocké à chaque événement (hash Redis « live »), sans l'usage ni la durée. */
+export function snapshot(s) {
   const p = progress(s);
   return {
     sid: s.sid,
@@ -267,13 +180,34 @@ export function publicSession(s, now) {
     currentStep: p.current,
     stepsDone: p.done,
     stepsTotal: p.total,
-    agents: Object.keys(s.agents).length,
+    agents: Object.keys(s.agents ?? {}).length,
     workflow: s.workflow?.name ?? '',
-    costUsd: round2(s.usage?.costUsd ?? 0),
-    contextPct: Math.round(s.usage?.contextPct ?? 0),
-    model: s.usage?.model ?? null,
-    duration: formatDuration(now - s.turnStartedAt),
+    startedAt: Math.floor(s.turnStartedAt / 1000),
     updatedAt: Math.floor(s.updatedAt / 1000),
+  };
+}
+
+/**
+ * Session telle que la lisent l'app et le widget (⚠️ clés = PulseState.Session côté Swift).
+ * @param snap  résultat de snapshot()
+ * @param usage { costUsd, contextPct, model, title } écrit par la status line, ou null
+ */
+export function publicSession(snap, usage, now) {
+  let { status, activity } = snap;
+  if (status === 'running' && now - snap.updatedAt * 1000 > SILENT_AFTER_MS) {
+    status = 'idle';
+    activity = 'Plus de nouvelles (interrompu ?)';
+  }
+  const end = ACTIVE.has(status) ? now : snap.updatedAt * 1000;
+  return {
+    ...snap,
+    title: snap.title || usage?.title || null,
+    status,
+    activity,
+    costUsd: round2(usage?.costUsd ?? 0),
+    contextPct: Math.round(usage?.contextPct ?? 0),
+    model: usage?.model ?? null,
+    duration: formatDuration(end - snap.startedAt * 1000),
   };
 }
 

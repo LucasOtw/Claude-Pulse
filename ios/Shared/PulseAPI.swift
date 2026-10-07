@@ -6,8 +6,8 @@ enum PulseAPIError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notConfigured: return "Renseigne l'URL du backend et le jeton dans les réglages."
-        case .http(401, _): return "Jeton refusé par le backend."
+        case .notConfigured: return "Backend non configuré : lance ios/setup.sh puis recompile."
+        case .http(401, _): return "Jeton refusé par le backend (PULSE_TOKEN)."
         case let .http(code, body): return "Erreur \(code) : \(body)"
         }
     }
@@ -21,24 +21,9 @@ enum PulseAPI {
         return state
     }
 
-    /// kind : "start" (jeton push-to-start) ou "activity" (jeton d'une Live Activity).
-    static func registerToken(kind: String, token: Data, sessionId: String? = nil) async throws {
-        var body: [String: String] = ["kind": kind, "token": token.map { String(format: "%02x", $0) }.joined()]
-        if let sessionId { body["sid"] = sessionId }
-        _ = try await request("POST", "/api/device", body: body)
-    }
-
-    /// Démo de bout en bout : step = "start", "waiting" ou "end". Renvoie un résumé lisible.
-    static func sendTest(step: String) async throws -> String {
-        let data = try await request("POST", "/api/test", body: ["step": step])
-        let body = String(data: data, encoding: .utf8) ?? ""
-        if body.contains("\"skipped\"") || body.contains("\"error\"") {
-            return "⚠️ Rien n'a été envoyé : \(body)"
-        }
-        if body.contains("\"reason\"") {
-            return "⚠️ Apple a refusé la push : \(body)"
-        }
-        return "Envoyé ✅"
+    /// Démo de bout en bout : step = "start", "waiting" ou "end".
+    static func sendTest(step: String) async throws {
+        _ = try await request("POST", "/api/test", body: ["step": step])
     }
 
     private static func request(_ method: String, _ path: String, body: [String: String]? = nil) async throws -> Data {
@@ -47,6 +32,7 @@ enum PulseAPI {
         }
         var req = URLRequest(url: url, timeoutInterval: 15)
         req.httpMethod = method
+        req.cachePolicy = .reloadIgnoringLocalCacheData
         req.setValue("Bearer \(PulseConfig.token)", forHTTPHeaderField: "Authorization")
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")

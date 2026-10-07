@@ -2,75 +2,47 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var activities: ActivityManager
-
-    @State private var baseURL = PulseConfig.baseURL
-    @State private var token = PulseConfig.token
     @State private var message: String?
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("https://claude-pulse-xxx.vercel.app", text: $baseURL)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    SecureField("PULSE_TOKEN", text: $token)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    LabeledContent("URL", value: PulseConfig.isConfigured ? PulseConfig.baseURL : "non configurée")
+                    LabeledContent("Jeton", value: PulseConfig.isConfigured ? "••••" + String(PulseConfig.token.suffix(4)) : "non configuré")
                 } header: {
                     Text("Backend")
                 } footer: {
-                    Text("Le même jeton que la variable PULSE_TOKEN sur Vercel et dans ~/.claude/claude-pulse/config.")
+                    Text("Pour changer : relance ios/setup.sh sur le Mac, puis recompile depuis Xcode.")
                 }
 
                 Section {
-                    LabeledContent("Push à distance", value: activities.startTokenRegistered ? "Prêt ✅" : "En attente…")
-                    if let error = activities.lastError {
-                        Text(error).font(.footnote).foregroundStyle(.red)
-                    }
-                    Button("Tester : démarrer") { test("start") }
-                    Button("Tester : attente de validation") { test("waiting") }
-                    Button("Tester : terminer") { test("end") }
-                    Button("Fermer toutes les Live Activities", role: .destructive) {
-                        Task { await activities.endAll() }
+                    Button("Démo : tâche en cours") { test("start") }
+                    Button("Démo : attente de validation") { test("waiting") }
+                    Button("Démo : terminée") { test("end") }
+                    if let message {
+                        Text(message).font(.footnote).foregroundStyle(.secondary)
                     }
                 } header: {
-                    Text("Live Activities")
+                    Text("Tester")
                 } footer: {
-                    Text("Verrouille l'iPhone après « Tester : démarrer » pour voir l'activité.")
-                }
-
-                if let message {
-                    Section { Text(message) }
+                    Text("Crée une fausse session « Démo » sur le backend. Lance la surveillance avant, puis verrouille l'iPhone pour voir la Live Activity changer.")
                 }
             }
             .navigationTitle("Réglages")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("OK") {
-                        save()
-                        Task { await activities.resendTokens() }
-                        dismiss()
-                    }
+                    Button("OK") { dismiss() }
                 }
             }
         }
     }
 
-    private func save() {
-        PulseConfig.baseURL = baseURL
-        PulseConfig.token = token
-    }
-
     private func test(_ step: String) {
-        save()
         Task {
             do {
-                // Le jeton push-to-start doit être connu du backend avant la démo.
-                await activities.resendTokens()
-                message = try await PulseAPI.sendTest(step: step)
+                try await PulseAPI.sendTest(step: step)
+                message = "Envoyé ✅ : la Live Activity se met à jour d'ici quelques secondes."
             } catch {
                 message = error.localizedDescription
             }

@@ -1,33 +1,23 @@
 import Foundation
 
-/// Réglages partagés entre l'app et le widget (App Group).
+/// Réglages compilés dans l'app et le widget (voir PulseSecrets.example.swift et setup.sh).
+/// Sans compte développeur payant, pas d'App Group pour partager des réglages saisis dans l'app.
 enum PulseConfig {
-    static let appGroup = "group.com.lucasotw.claudepulse"
-    static var defaults: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
+    static let baseURL: String = {
+        var url = PulseSecrets.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        while url.hasSuffix("/") { url.removeLast() }
+        return url
+    }()
 
-    static var baseURL: String {
-        get { defaults.string(forKey: "baseURL") ?? "" }
-        set { defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines).trimmingSuffix("/"), forKey: "baseURL") }
+    static let token = PulseSecrets.token.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    static var isConfigured: Bool {
+        baseURL.hasPrefix("http") && !baseURL.contains("xxx") && !token.isEmpty && !token.hasPrefix("colle-ici")
     }
 
-    static var token: String {
-        get { defaults.string(forKey: "token") ?? "" }
-        set { defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "token") }
-    }
-
-    static var isConfigured: Bool { !baseURL.isEmpty && !token.isEmpty }
-
-    /// Dernier état reçu, pour que le widget ait quelque chose à afficher hors ligne.
+    /// Dernier état reçu (propre à l'app ou au widget), pour afficher quelque chose hors ligne.
     static var cachedState: PulseState? {
-        get { defaults.data(forKey: "cachedState").flatMap { try? JSONDecoder().decode(PulseState.self, from: $0) } }
-        set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "cachedState") }
-    }
-}
-
-private extension String {
-    func trimmingSuffix(_ suffix: String) -> String {
-        var s = self
-        while s.hasSuffix(suffix) { s.removeLast(suffix.count) }
-        return s
+        get { UserDefaults.standard.data(forKey: "cachedState").flatMap { try? JSONDecoder().decode(PulseState.self, from: $0) } }
+        set { UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: "cachedState") }
     }
 }
