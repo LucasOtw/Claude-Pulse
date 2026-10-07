@@ -23,7 +23,9 @@ Les scripts du Mac ne transmettent que des **métadonnées** : nom du dossier du
 Sans compte payant, pas de push Apple : le serveur ne peut pas réveiller l'iPhone. Alors c'est l'app qui fait le travail :
 
 1. Tu ouvres Claude Pulse et tu touches **Lancer la surveillance** : une Live Activity apparaît (iOS n'autorise à la créer que depuis l'app ouverte).
-2. L'app joue un **son silencieux** en boucle pour qu'iOS la laisse tourner en arrière-plan. Il se mélange à ta musique sans la couper.
+2. Deux filets empêchent iOS d'endormir l'app écran verrouillé :
+   - un **son silencieux** en boucle, qui se mélange à ta musique sans la couper et se relance tout seul après un appel ou une alarme ;
+   - la **localisation en arrière-plan**, en précision approximative (sans GPS). La position n'est ni enregistrée ni envoyée : seul compte le fait que le service tourne. Une pastille bleue s'affiche en haut de l'écran. Désactivable dans Réglages → « Rester active ».
 3. Elle interroge le backend toutes les **5 s** quand une tâche tourne (20 s sinon), met à jour la Live Activity et t'envoie les notifications.
 4. La Live Activity suit automatiquement la session importante : celle qui attend ta validation, sinon la plus récente en cours.
 
@@ -31,7 +33,7 @@ Les limites à connaître :
 
 - **L'app expire au bout de 7 jours** (règle d'Apple pour les Apple ID gratuits) : rebranche l'iPhone et relance-la depuis Xcode (⌘R) une fois par semaine.
 - iOS ferme une Live Activity au bout de **8 h** : relance la surveillance le matin.
-- Si iOS tue l'app (rare, ou si tu la fermes depuis le sélecteur d'apps), la Live Activity se fige et affiche « Plus de nouvelles ». Rouvre l'app.
+- Si l'app est fermée depuis le sélecteur d'apps, ou tuée par iOS (rare), la Live Activity affiche « Mise à jour en pause » : touche-la pour rouvrir l'app, la surveillance reprend toute seule.
 - La surveillance consomme un peu de batterie. Balaie la Live Activity ou touche **Arrêter** quand tu n'en as plus besoin.
 
 ---

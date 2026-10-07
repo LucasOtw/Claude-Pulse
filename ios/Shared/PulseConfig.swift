@@ -33,6 +33,12 @@ enum PulseConfig {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "activityTheme") }
     }
 
+    /// Localisation en arrière-plan pour garder l'app éveillée (activée par défaut).
+    static var backgroundLocation: Bool {
+        get { UserDefaults.standard.object(forKey: "backgroundLocation") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "backgroundLocation") }
+    }
+
     /// Dernier état reçu (propre à l'app ou au widget), pour afficher quelque chose hors ligne.
     static var cachedState: PulseState? {
         get { UserDefaults.standard.data(forKey: "cachedState").flatMap { try? JSONDecoder().decode(PulseState.self, from: $0) } }

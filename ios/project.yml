@@ -34,8 +34,10 @@ targets:
         CFBundleDisplayName: Claude Pulse
         UILaunchScreen: {}
         NSSupportsLiveActivities: true
-        # Le son silencieux garde l'app éveillée pour mettre à jour la Live Activity écran verrouillé.
-        UIBackgroundModes: [audio]
+        # Le son silencieux et la localisation (grossière, jamais envoyée) gardent l'app éveillée
+        # pour mettre à jour la Live Activity écran verrouillé.
+        UIBackgroundModes: [audio, location]
+        NSLocationWhenInUseUsageDescription: "Claude Pulse utilise la localisation uniquement pour rester active écran verrouillé et garder la Live Activity à jour. Ta position n'est ni enregistrée ni envoyée."
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
     settings:
       base:

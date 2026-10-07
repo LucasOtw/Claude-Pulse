@@ -4,7 +4,7 @@ import AVFoundation
 /// (mode « audio » déclaré dans Info.plist). Mélangé aux autres sons : ta musique n'est pas coupée.
 final class SilentAudio {
     private var player: AVAudioPlayer?
-    private var observer: NSObjectProtocol?
+    private var observers: [NSObjectProtocol] = []
 
     func start() {
         let session = AVAudioSession.sharedInstance()
@@ -13,27 +13,47 @@ final class SilentAudio {
         if player == nil {
             player = try? AVAudioPlayer(data: Self.silentWAV())
             player?.numberOfLoops = -1
-            player?.volume = 0
+            // Le fichier ne contient que des zéros : inaudible même à plein volume. Un volume à 0
+            // laisserait iOS considérer que l'app ne joue rien et l'endormir.
+            player?.volume = 1
+            player?.prepareToPlay()
         }
         player?.play()
+        observe()
+    }
 
-        // Après un appel ou une alarme, iOS met l'audio en pause : on relance.
-        guard observer == nil else { return }
-        observer = NotificationCenter.default.addObserver(
-            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
-        ) { [weak self] note in
-            guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-                  AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
-            try? AVAudioSession.sharedInstance().setActive(true)
-            self?.player?.play()
-        }
+    /// Appelé à chaque relevé : relance le son si iOS l'a coupé sans prévenir.
+    func ensurePlaying() {
+        guard player?.isPlaying != true else { return }
+        start()
     }
 
     func stop() {
         player?.stop()
-        if let observer { NotificationCenter.default.removeObserver(observer) }
-        observer = nil
+        player = nil
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        observers = []
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func observe() {
+        guard observers.isEmpty else { return }
+        let center = NotificationCenter.default
+        // Après un appel, une alarme ou Siri, iOS met l'audio en pause : on relance.
+        observers.append(center.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
+            self?.start()
+        })
+        // Le service audio d'iOS a redémarré : l'ancien lecteur ne marche plus, on en recrée un.
+        observers.append(center.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.player = nil
+            self?.start()
+        })
     }
 
     /// Une seconde de silence au format WAV (PCM 16 bits mono, 8 kHz), générée en mémoire.

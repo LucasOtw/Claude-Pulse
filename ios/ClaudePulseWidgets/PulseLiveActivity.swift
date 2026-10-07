@@ -146,7 +146,7 @@ struct LockScreenView: View {
             }
 
             if isStale {
-                Text("Plus de nouvelles : rouvre Claude Pulse")
+                Text("Mise à jour en pause : touche pour reprendre")
                     .font(.subheadline)
                     .foregroundStyle(PulseStyle.warn)
                     .lineLimit(1)

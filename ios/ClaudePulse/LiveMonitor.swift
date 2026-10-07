@@ -4,7 +4,7 @@ import WidgetKit
 
 /// Surveillance sans push Apple : l'app interroge le backend toutes les quelques secondes,
 /// met à jour elle-même la Live Activity et envoie des notifications locales.
-/// Un son silencieux la garde éveillée en arrière-plan tant que la surveillance tourne.
+/// Un son silencieux et la localisation en arrière-plan la gardent éveillée tant que la surveillance tourne.
 @MainActor
 final class LiveMonitor: ObservableObject {
     static let shared = LiveMonitor()
@@ -22,6 +22,7 @@ final class LiveMonitor: ObservableObject {
     private var loop: Task<Void, Never>?
     private var watcher: Task<Void, Never>?
     private let keepAlive = SilentAudio()
+    private let location = LocationKeepAlive()
     private var knownStatus: [String: String] = [:]
     private var lastContent: PulseAttributes.ContentState?
     private var lastPushed = Date.distantPast
@@ -62,7 +63,7 @@ final class LiveMonitor: ObservableObject {
         }
         lastContent = content
         lastPushed = Date()
-        keepAlive.start()
+        startKeepAlive()
         isRunning = true
         lastError = nil
         watchActivity()
@@ -71,13 +72,13 @@ final class LiveMonitor: ObservableObject {
 
     /// À chaque retour au premier plan (et au lancement) : si une Live Activity est déjà affichée,
     /// on la reprend et on la met à jour tout de suite. Sans ça, une app relancée par iOS ou Xcode
-    /// laissait l'activité figée sur « Plus de nouvelles ».
+    /// laissait l'activité figée sur « Mise à jour en pause ».
     func resume() async {
         guard !resuming else { return }
         resuming = true
         defer { resuming = false }
         if isRunning {
-            keepAlive.start() // un appel ou une autre app a pu couper le son silencieux
+            startKeepAlive() // un appel ou une autre app a pu couper le son silencieux
             await tick()
             if loop == nil { loop = Task { [weak self] in await self?.run() } }
             return
@@ -90,7 +91,7 @@ final class LiveMonitor: ObservableObject {
         if knownStatus.isEmpty, let state {
             state.sessions.forEach { knownStatus[$0.sid] = $0.status } // pas de notification pour l'existant
         }
-        keepAlive.start()
+        startKeepAlive()
         isRunning = true
         watchActivity()
         await tick()
@@ -112,11 +113,25 @@ final class LiveMonitor: ObservableObject {
         watcher?.cancel()
         watcher = nil
         keepAlive.stop()
+        location.stop()
         if let activity {
             await activity.end(nil, dismissalPolicy: .immediate)
         }
         activity = nil
         isRunning = false
+    }
+
+    /// Garde l'app éveillée écran verrouillé. À lancer au premier plan (iOS refuse ensuite).
+    private func startKeepAlive() {
+        keepAlive.start()
+        if PulseConfig.backgroundLocation { location.start() } else { location.stop() }
+    }
+
+    func setBackgroundLocation(_ on: Bool) {
+        PulseConfig.backgroundLocation = on
+        objectWillChange.send()
+        guard isRunning else { return }
+        if on { location.start() } else { location.stop() }
     }
 
     /// Rafraîchit l'écran de l'app sans lancer la surveillance.
@@ -144,6 +159,7 @@ final class LiveMonitor: ObservableObject {
     /// Un relevé : état du backend, notifications, Live Activity. Renvoie le délai avant le suivant.
     @discardableResult
     private func tick() async -> Double {
+        if isRunning { keepAlive.ensurePlaying() }
         do {
             let fresh = try await PulseAPI.fetchState()
             state = fresh

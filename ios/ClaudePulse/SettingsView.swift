@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var monitor: LiveMonitor
     @State private var theme = PulseConfig.activityTheme
+    @State private var backgroundLocation = PulseConfig.backgroundLocation
 
     var body: some View {
         ScrollView {
@@ -39,6 +40,23 @@ struct SettingsView: View {
                 .onChange(of: theme) { _, newValue in
                     Task { await monitor.setTheme(newValue) }
                 }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    SectionLabel(title: "Écran verrouillé")
+                    RowGroup {
+                        Toggle(isOn: $backgroundLocation) {
+                            HStack(spacing: 12) {
+                                RowIcon(symbol: "location")
+                                Text("Rester active").foregroundStyle(PulseStyle.textPrimary)
+                            }
+                        }
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 16)
+                    }
+                    Footnote("Utilise la localisation approximative (sans GPS) pour qu'iOS n'endorme pas l'app : la Live Activity reste à jour sans rouvrir l'app. Ta position n'est ni enregistrée ni envoyée. Une pastille bleue s'affiche en haut de l'écran pendant la surveillance.")
+                }
+                .sensoryFeedback(.selection, trigger: backgroundLocation)
+                .onChange(of: backgroundLocation) { _, on in monitor.setBackgroundLocation(on) }
 
                 VStack(alignment: .leading, spacing: 10) {
                     SectionLabel(title: "À propos")
