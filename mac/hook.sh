@@ -1,0 +1,69 @@
+#!/bin/bash
+# Claude Pulse — hook Claude Code.
+# Reçoit l'événement JSON sur stdin, n'en garde que les métadonnées utiles
+# (jamais le texte de tes prompts ni le contenu des fichiers) et l'envoie au backend.
+# Lancé en "async": il ne ralentit jamais Claude, et il échoue toujours en silence.
+
+CONF="${CLAUDE_PULSE_CONFIG:-$HOME/.claude/claude-pulse/config}"
+[ -f "$CONF" ] || exit 0
+# shellcheck source=/dev/null
+. "$CONF"
+[ -n "$PULSE_URL" ] && [ -n "$PULSE_TOKEN" ] || exit 0
+command -v jq >/dev/null || exit 0
+
+input=$(cat)
+event=$(printf '%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null)
+[ -n "$event" ] || exit 0
+
+# PreToolUse arrive à chaque outil : on n'envoie qu'un battement toutes les
+# PULSE_HEARTBEAT secondes, sauf pour les outils qui changent la progression.
+if [ "$event" = "PreToolUse" ]; then
+  tool=$(printf '%s' "$input" | jq -r '.tool_name // empty')
+  case "$tool" in
+    TodoWrite|Workflow|Agent|Task) ;;
+    *)
+      sid=$(printf '%s' "$input" | jq -r '.session_id // "x"' | tr -cd 'A-Za-z0-9_-')
+      stamp="${TMPDIR:-/tmp}/claude-pulse-hb-$sid"
+      now=$(date +%s)
+      last=$(cat "$stamp" 2>/dev/null || echo 0)
+      [ $((now - last)) -ge "${PULSE_HEARTBEAT:-30}" ] || exit 0
+      echo "$now" > "$stamp"
+      ;;
+  esac
+fi
+
+payload=$(printf '%s' "$input" | jq -c '
+  def cut($n): if type == "string" then .[0:$n] else . end;
+  def workflow:
+    (.tool_input.script // "" | .[0:4000]) as $head
+    | {
+        name: ((.tool_input.name // ($head | capture("name:\\s*[\"'"'"'`](?<n>[^\"'"'"'`]+)") | .n)) // "workflow"),
+        phases: ([$head | scan("title:\\s*[\"'"'"'`]([^\"'"'"'`]+)") | .[0]] | .[0:8])
+      };
+  {
+    v: 1,
+    e: .hook_event_name,
+    sid: .session_id,
+    project: (.cwd // "" | split("/") | last),
+    title: (.session_title // null | cut(60)),
+    tool: (.tool_name // null),
+    agentId: (.agent_id // null),
+    agentType: (.agent_type // null),
+    ntype: (.notification_type // null),
+    message: (.message // null | cut(120)),
+    taskId: (.task_id // null),
+    taskSubject: (.task_subject // null | cut(80)),
+    todos: (if .tool_name == "TodoWrite"
+            then [.tool_input.todos[]? | {c: ((.activeForm // .content // "") | cut(80)), s: .status}]
+            else null end),
+    workflow: (if .tool_name == "Workflow" then workflow else null end),
+    bg: (if .background_tasks then [.background_tasks[] | {type, status, name: ((.name // .description // "") | cut(60))}] else null end),
+    error: (.error // .error_type // .reason // null | if type == "string" then .[0:60] else null end)
+  }
+  | with_entries(select(.value != null))' 2>/dev/null) || exit 0
+
+curl -sS -m 8 -X POST "$PULSE_URL/api/hook" \
+  -H "Authorization: Bearer $PULSE_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary "$payload" >/dev/null 2>&1
+exit 0

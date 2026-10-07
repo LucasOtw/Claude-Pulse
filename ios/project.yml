@@ -1,0 +1,59 @@
+# Génère ClaudePulse.xcodeproj :  brew install xcodegen && xcodegen
+name: ClaudePulse
+options:
+  bundleIdPrefix: com.lucasotw
+  deploymentTarget:
+    iOS: "17.2"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    # ⚠️ Mets ici ton Team ID Apple (developer.apple.com > Membership), ou choisis l'équipe dans Xcode.
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+
+targets:
+  ClaudePulse:
+    type: application
+    platform: iOS
+    sources: [ClaudePulse, Shared]
+    info:
+      path: ClaudePulse/Info.plist
+      properties:
+        CFBundleDisplayName: Claude Pulse
+        UILaunchScreen: {}
+        NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    entitlements:
+      path: ClaudePulse/ClaudePulse.entitlements
+      properties:
+        aps-environment: development
+        com.apple.security.application-groups: [group.com.lucasotw.claudepulse]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lucasotw.claudepulse
+    dependencies:
+      - target: ClaudePulseWidgets
+
+  ClaudePulseWidgets:
+    type: app-extension
+    platform: iOS
+    sources: [ClaudePulseWidgets, Shared]
+    info:
+      path: ClaudePulseWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Claude Pulse
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: ClaudePulseWidgets/ClaudePulseWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.lucasotw.claudepulse]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lucasotw.claudepulse.widgets

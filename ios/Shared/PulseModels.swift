@@ -1,0 +1,66 @@
+import Foundation
+
+/// Réponse de GET /api/state.
+struct PulseState: Codable {
+    struct Limit: Codable {
+        var pct: Double
+        /// Secondes Unix
+        var resetsAt: Double
+        var resetDate: Date { Date(timeIntervalSince1970: resetsAt) }
+    }
+
+    struct Limits: Codable {
+        var fiveHour: Limit?
+        var sevenDay: Limit?
+    }
+
+    struct Today: Codable {
+        var costUsd: Double
+        var sessions: Int
+    }
+
+    struct Session: Codable, Identifiable {
+        var sid: String
+        var project: String
+        var title: String?
+        var status: String
+        var activity: String
+        var currentStep: String
+        var stepsDone: Int
+        var stepsTotal: Int
+        var agents: Int
+        var workflow: String
+        var costUsd: Double
+        var contextPct: Int
+        var model: String?
+        var duration: String
+        var updatedAt: Double
+
+        var id: String { sid }
+        var isActive: Bool { ["running", "waiting", "background"].contains(status) }
+    }
+
+    var updatedAt: Double
+    var limits: Limits
+    var today: Today
+    var sessions: [Session]
+    var pushReady: Bool?
+
+    var activeSessions: [Session] { sessions.filter(\.isActive) }
+
+    static let preview = PulseState(
+        updatedAt: Date().timeIntervalSince1970,
+        limits: Limits(
+            fiveHour: Limit(pct: 23.5, resetsAt: Date().addingTimeInterval(2 * 3600).timeIntervalSince1970),
+            sevenDay: Limit(pct: 41.2, resetsAt: Date().addingTimeInterval(3 * 86400).timeIntervalSince1970)
+        ),
+        today: Today(costUsd: 4.87, sessions: 3),
+        sessions: [
+            Session(sid: "1", project: "Studio_Granit", title: "Refonte accueil", status: "running",
+                    activity: "Modifie des fichiers", currentStep: "Écriture du CSS", stepsDone: 2, stepsTotal: 5,
+                    agents: 1, workflow: "", costUsd: 1.42, contextPct: 38, model: "Opus", duration: "12 min",
+                    updatedAt: Date().timeIntervalSince1970),
+        ],
+        pushReady: true
+    )
+}
