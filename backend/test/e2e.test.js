@@ -74,7 +74,7 @@ test('scénario complet : usage, hooks, lecture par l’iPhone', async () => {
   const sid = 'sess-1';
   const resetsAt = Math.floor(Date.now() / 1000) + 3600;
   await call(api.usage, 'POST', {
-    sid, project: 'Studio_Granit', model: 'Opus', costUsd: 1.5, contextPct: 42, title: 'Refonte accueil',
+    sid, project: 'Studio_Granit', model: 'Opus', costUsd: 1.5, contextPct: 42, title: 'Refonte accueil', durationMs: 20_000,
     fiveHour: { pct: 23.5, resetsAt }, sevenDay: { pct: 41.2, resetsAt: resetsAt - 7200 }, // 7 j déjà réinitialisé
   });
   await call(api.hook, 'POST', { e: 'UserPromptSubmit', sid, project: 'Studio_Granit' });
@@ -103,6 +103,19 @@ test('scénario complet : usage, hooks, lecture par l’iPhone', async () => {
   assert.equal(st2.data.sessions[0].status, 'done');
   assert.equal(st2.data.sessions[0].costUsd, 2.25);
   assert.equal(st2.data.today.costUsd, 2.25, 'le coût du jour n’additionne que les hausses');
+});
+
+test('une session déjà ouverte avant l’installation ne gonfle pas le coût du jour', async () => {
+  const before = (await call(api.state, 'GET')).data.today.costUsd;
+  // Session ouverte depuis 3 h, 790 $ cumulés : son premier relevé n'est pas compté…
+  await call(api.usage, 'POST', { sid: 'old', costUsd: 790, contextPct: 41, durationMs: 3 * 3600 * 1000 });
+  assert.equal((await call(api.state, 'GET')).data.today.costUsd, before);
+  // …mais ce qu'elle dépense ensuite l'est.
+  await call(api.usage, 'POST', { sid: 'old', costUsd: 791.5, contextPct: 42, durationMs: 3 * 3600 * 1000 + 60_000 });
+  assert.equal((await call(api.state, 'GET')).data.today.costUsd, before + 1.5);
+  // Ancien statusline.sh sans durée : même prudence.
+  await call(api.usage, 'POST', { sid: 'legacy', costUsd: 50 });
+  assert.equal((await call(api.state, 'GET')).data.today.costUsd, before + 1.5);
 });
 
 test('démo depuis l’app', async () => {
