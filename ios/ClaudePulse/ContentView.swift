@@ -17,62 +17,36 @@ struct ContentView: View {
         Dictionary(sessions.map { ($0.sid, $0.status) }, uniquingKeysWith: { a, _ in a })
     }
 
+    // Le corps est découpé en petits morceaux : une seule longue chaîne de modificateurs
+    // dépasse le temps que le compilateur Swift s'accorde pour vérifier les types.
     var body: some View {
+        scroll
+            .safeAreaInset(edge: .top, spacing: 0) { header }
+            .background(PulseStyle.background.ignoresSafeArea())
+            .refreshable { await pullToRefresh() }
+            .modifier(HomeHaptics(
+                showDetail: showDetail,
+                selectedID: selected?.id,
+                refreshes: refreshes,
+                statuses: statuses,
+                error: monitor.lastError
+            ))
+            .task { await monitor.refresh() }
+            .onChange(of: scenePhase) { _, phase in onScenePhase(phase) }
+            .modifier(HomeSheets(showSettings: $showSettings, showDetail: $showDetail, selected: $selected))
+            .tint(PulseStyle.accent)
+    }
+
+    private var header: some View {
+        Header(onSettings: { showSettings = true }, onRefresh: { Task { await monitor.refresh() } })
+    }
+
+    private var scroll: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                if !PulseConfig.isConfigured {
-                    NoticeCard(
-                        symbol: "wrench.and.screwdriver",
-                        text: "Lance ios/setup.sh avec l'URL du backend et ton PULSE_TOKEN, puis recompile."
-                    )
-                }
-
-                Button { showDetail = true } label: {
-                    LimitHero(limit: monitor.state?.limits.fiveHour)
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Ouvre le détail de ton utilisation")
-
-                RowGroup {
-                    WeekRow(limit: monitor.state?.limits.sevenDay)
-                    RowDivider()
-                    InfoRow(symbol: "terminal", title: "Sessions aujourd'hui", value: monitor.state.map { "\($0.today.sessions)" } ?? "—")
-                }
-
-                MonitorCTA()
-
-                if let error = monitor.lastError {
-                    NoticeCard(symbol: "exclamationmark.triangle", text: error, tint: PulseStyle.critical)
-                }
-
-                if !active.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        SectionLabel(title: "En cours")
-                        ForEach(active) { session in
-                            Button { selected = session } label: { SessionCard(session: session) }
-                                .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                if !recent.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        SectionLabel(title: "Récemment")
-                        RowGroup {
-                            ForEach(Array(recent.enumerated()), id: \.element.id) { index, session in
-                                if index > 0 { RowDivider() }
-                                Button { selected = session } label: { RecentRow(session: session) }
-                                    .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                }
-
-                if sessions.isEmpty && monitor.state != nil {
-                    EmptyState()
-                } else if monitor.state == nil && PulseConfig.isConfigured {
-                    ProgressView().tint(PulseStyle.accent).frame(maxWidth: .infinity).padding(.top, 24)
-                }
+                summary
+                sessionLists
+                placeholder
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
@@ -80,29 +54,125 @@ struct ContentView: View {
             .animation(.snappy, value: sessions.map(\.status))
         }
         .scrollIndicators(.hidden)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            Header(onSettings: { showSettings = true }, onRefresh: { Task { await monitor.refresh() } })
+    }
+
+    /// Configuration, limites, surveillance, erreur.
+    @ViewBuilder
+    private var summary: some View {
+        if !PulseConfig.isConfigured {
+            NoticeCard(
+                symbol: "wrench.and.screwdriver",
+                text: "Lance ios/setup.sh avec l'URL du backend et ton PULSE_TOKEN, puis recompile."
+            )
         }
-        .background(PulseStyle.background.ignoresSafeArea())
-        .refreshable {
-            await monitor.refresh()
-            refreshes += 1
+
+        Button { showDetail = true } label: {
+            LimitHero(limit: monitor.state?.limits.fiveHour)
         }
-        // Retours haptiques : ouvrir un détail, fin d'un tirer-pour-rafraîchir,
-        // Claude qui attend ta validation ou qui termine, erreur.
-        .sensoryFeedback(.impact(flexibility: .soft), trigger: showDetail) { _, open in open }
-        .sensoryFeedback(.impact(flexibility: .soft), trigger: selected?.id) { _, id in id != nil }
-        .sensoryFeedback(.impact(weight: .light), trigger: refreshes)
-        .sensoryFeedback(trigger: statuses) { old, new in PulseHaptics.sessions(old: old, new: new) }
-        .sensoryFeedback(trigger: monitor.lastError) { _, error in error == nil ? nil : .error }
-        .task { await monitor.refresh() }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active && !monitor.isRunning { Task { await monitor.refresh() } }
+        .buttonStyle(.plain)
+        .accessibilityHint("Ouvre le détail de ton utilisation")
+
+        RowGroup {
+            WeekRow(limit: monitor.state?.limits.sevenDay)
+            RowDivider()
+            InfoRow(symbol: "terminal", title: "Sessions aujourd'hui", value: todaySessions)
         }
-        .sheet(isPresented: $showSettings) { SettingsView().environmentObject(monitor) }
-        .sheet(isPresented: $showDetail) { UsageDetailView().environmentObject(monitor) }
-        .sheet(item: $selected) { SessionDetailView(initial: $0) }
-        .tint(PulseStyle.accent)
+
+        MonitorCTA()
+
+        if let error = monitor.lastError {
+            NoticeCard(symbol: "exclamationmark.triangle", text: error, tint: PulseStyle.critical)
+        }
+    }
+
+    /// Sessions en cours (cartes) et récentes (lignes).
+    @ViewBuilder
+    private var sessionLists: some View {
+        if !active.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(title: "En cours")
+                ForEach(active) { session in
+                    Button { selected = session } label: { SessionCard(session: session) }
+                        .buttonStyle(.plain)
+                }
+            }
+        }
+
+        if !recent.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(title: "Récemment")
+                RowGroup {
+                    ForEach(Array(recent.enumerated()), id: \.element.id) { index, session in
+                        if index > 0 { RowDivider() }
+                        Button { selected = session } label: { RecentRow(session: session) }
+                            .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var placeholder: some View {
+        if sessions.isEmpty && monitor.state != nil {
+            EmptyState()
+        } else if monitor.state == nil && PulseConfig.isConfigured {
+            ProgressView().tint(PulseStyle.accent).frame(maxWidth: .infinity).padding(.top, 24)
+        }
+    }
+
+    private var todaySessions: String {
+        guard let state = monitor.state else { return "—" }
+        return "\(state.today.sessions)"
+    }
+
+    private func pullToRefresh() async {
+        await monitor.refresh()
+        refreshes += 1
+    }
+
+    private func onScenePhase(_ phase: ScenePhase) {
+        if phase == .active && !monitor.isRunning {
+            Task { await monitor.refresh() }
+        }
+    }
+}
+
+/// Retours haptiques de l'écran principal : ouvrir un détail, fin d'un tirer-pour-rafraîchir,
+/// Claude qui attend ta validation ou qui termine, erreur.
+private struct HomeHaptics: ViewModifier {
+    let showDetail: Bool
+    let selectedID: String?
+    let refreshes: Int
+    let statuses: [String: String]
+    let error: String?
+
+    func body(content: Content) -> some View {
+        content
+            .sensoryFeedback(.impact(flexibility: .soft), trigger: showDetail) { (_: Bool, open: Bool) -> Bool in open }
+            .sensoryFeedback(.impact(flexibility: .soft), trigger: selectedID) { (_: String?, id: String?) -> Bool in id != nil }
+            .sensoryFeedback(.impact(weight: .light), trigger: refreshes)
+            .sensoryFeedback(trigger: statuses) { (old: [String: String], new: [String: String]) -> SensoryFeedback? in
+                PulseHaptics.sessions(old: old, new: new)
+            }
+            .sensoryFeedback(trigger: error) { (_: String?, new: String?) -> SensoryFeedback? in
+                new == nil ? nil : .error
+            }
+    }
+}
+
+/// Feuilles ouvertes depuis l'écran principal.
+private struct HomeSheets: ViewModifier {
+    @EnvironmentObject private var monitor: LiveMonitor
+    @Binding var showSettings: Bool
+    @Binding var showDetail: Bool
+    @Binding var selected: PulseState.Session?
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $showSettings) { SettingsView().environmentObject(monitor) }
+            .sheet(isPresented: $showDetail) { UsageDetailView().environmentObject(monitor) }
+            .sheet(item: $selected) { (session: PulseState.Session) in SessionDetailView(initial: session) }
     }
 }
 
@@ -233,7 +303,9 @@ struct LimitHero: View {
         .padding(18)
         .background(PulseStyle.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .sensoryFeedback(trigger: PulseHaptics.level(limit?.pct)) { old, new in old >= 0 && new > old ? .warning : nil }
+        .sensoryFeedback(trigger: PulseHaptics.level(limit?.pct)) { (old: Int, new: Int) -> SensoryFeedback? in
+            old >= 0 && new > old ? .warning : nil
+        }
     }
 
     private func levelLabel(_ pct: Double) -> String {
@@ -285,7 +357,9 @@ struct MonitorCTA: View {
     var body: some View {
         content
             .sensoryFeedback(.impact(weight: .medium), trigger: presses)
-            .sensoryFeedback(trigger: monitor.isRunning) { _, running in running ? .success : nil }
+            .sensoryFeedback(trigger: monitor.isRunning) { (_: Bool, running: Bool) -> SensoryFeedback? in
+                running ? .success : nil
+            }
     }
 
     @ViewBuilder

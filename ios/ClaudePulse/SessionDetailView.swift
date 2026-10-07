@@ -33,43 +33,10 @@ struct SessionDetailView: View {
             .padding(.top, 8)
             .padding(.bottom, 32)
             .animation(.snappy, value: detail?.agents.map(\.status))
-            .sensoryFeedback(trigger: session.stepsDone) { old, new in new > old ? .success : nil }
-            .sensoryFeedback(trigger: finishedAgents) { old, new in new > old ? .impact(flexibility: .soft) : nil }
-            .sensoryFeedback(trigger: session.status) { _, status in
-                switch status {
-                case "waiting": return .warning
-                case "done": return .success
-                case "error": return .error
-                default: return nil
-                }
-            }
+            .modifier(SessionHaptics(stepsDone: session.stepsDone, finishedAgents: finishedAgents, status: session.status))
         }
         .scrollIndicators(.hidden)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            ZStack {
-                VStack(spacing: 1) {
-                    Text(session.project)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(PulseStyle.textPrimary)
-                        .lineLimit(1)
-                    if let title = session.title, !title.isEmpty {
-                        Text(title)
-                            .font(.caption)
-                            .foregroundStyle(PulseStyle.textSecondary)
-                            .lineLimit(1)
-                    }
-                }
-                .padding(.horizontal, 60)
-                HStack {
-                    CircleButton(symbol: "xmark", label: "Fermer") { dismiss() }
-                    Spacer()
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 16)
-            .padding(.bottom, 8)
-            .background(PulseStyle.background)
-        }
+        .safeAreaInset(edge: .top, spacing: 0) { topBar }
         .background(PulseStyle.background.ignoresSafeArea())
         .presentationDragIndicator(.visible)
         .tint(PulseStyle.accent)
@@ -79,6 +46,32 @@ struct SessionDetailView: View {
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
             }
         }
+    }
+
+    private var topBar: some View {
+        ZStack {
+            VStack(spacing: 1) {
+                Text(session.project)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(PulseStyle.textPrimary)
+                    .lineLimit(1)
+                if let title = session.title, !title.isEmpty {
+                    Text(title)
+                        .font(.caption)
+                        .foregroundStyle(PulseStyle.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 60)
+            HStack {
+                CircleButton(symbol: "xmark", label: "Fermer") { dismiss() }
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 8)
+        .background(PulseStyle.background)
     }
 
     private func load() async {
@@ -356,5 +349,25 @@ private struct AgentRow: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
+    }
+}
+
+/// Retours haptiques du détail : étape terminée, sous-agent terminé, validation demandée, fin, erreur.
+private struct SessionHaptics: ViewModifier {
+    let stepsDone: Int
+    let finishedAgents: Int
+    let status: String
+
+    func body(content: Content) -> some View {
+        content
+            .sensoryFeedback(trigger: stepsDone) { (old: Int, new: Int) -> SensoryFeedback? in
+                new > old ? .success : nil
+            }
+            .sensoryFeedback(trigger: finishedAgents) { (old: Int, new: Int) -> SensoryFeedback? in
+                new > old ? .impact(flexibility: .soft) : nil
+            }
+            .sensoryFeedback(trigger: status) { (_: String, new: String) -> SensoryFeedback? in
+                PulseHaptics.status(new)
+            }
     }
 }

@@ -315,6 +315,16 @@ enum PulseHaptics {
         return feedback
     }
 
+    /// Statut qui vient de changer dans la vue détaillée d'une session.
+    static func status(_ status: String) -> SensoryFeedback? {
+        switch status {
+        case "waiting": return .warning
+        case "done": return .success
+        case "error": return .error
+        default: return nil
+        }
+    }
+
     /// Palier de limite (50 %, 75 %, 90 %) ; -1 tant que la limite est inconnue.
     static func level(_ pct: Double?) -> Int {
         guard let pct else { return -1 }
