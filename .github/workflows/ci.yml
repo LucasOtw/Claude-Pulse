@@ -1,0 +1,27 @@
+# Lance les tests à chaque push et pull request : serveur (Node) et scripts Mac (bash + jq).
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    name: Serveur
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+        working-directory: backend
+
+  mac:
+    name: Scripts Mac
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y jq
+      - run: for f in mac/*.sh update.sh ios/setup.sh ios/generate.sh; do bash -n "$f"; done
+      - run: ./mac/test.sh

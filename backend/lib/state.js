@@ -132,6 +132,7 @@ export function applyEvent(prev, ev, now) {
         if (s.todos && s.todos.done >= s.todos.total) s.todos = null;
         if (Object.values(s.tasks ?? {}).every((t) => t.done)) s.tasks = {};
       }
+      s.summary = null;
       log(s, now, 'Nouvelle demande');
       break;
 
@@ -212,6 +213,7 @@ export function applyEvent(prev, ev, now) {
         s.activity = 'Terminé';
         finishAgents(s, now);
       }
+      if (ev.summary) s.summary = String(ev.summary).slice(0, 200);
       log(s, now, s.activity);
       break;
     }
@@ -284,6 +286,7 @@ export function snapshot(s) {
     stepsTotal: p.total,
     agents: Object.keys(s.agents ?? {}).length,
     workflow: s.workflow?.name ?? '',
+    summary: s.status === 'done' ? (s.summary ?? null) : null,
     startedAt: Math.floor(s.turnStartedAt / 1000),
     progressStartedAt: s.progressStartedAt ? Math.floor(s.progressStartedAt / 1000) : null,
     updatedAt: Math.floor(s.updatedAt / 1000),

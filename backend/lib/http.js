@@ -11,8 +11,9 @@ function authorized(req) {
 
 /** Enrobe un handler Vercel : méthode, authentification par jeton, erreurs JSON. */
 export function route(method, fn) {
+  const methods = Array.isArray(method) ? method : [method];
   return async (req, res) => {
-    if (req.method !== method) return res.status(405).json({ error: 'method not allowed' });
+    if (!methods.includes(req.method)) return res.status(405).json({ error: 'method not allowed' });
     if (!authorized(req)) return res.status(401).json({ error: 'unauthorized' });
     try {
       let body = req.body;

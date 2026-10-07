@@ -62,12 +62,14 @@ const hashToObject = (h) => {
 /** Tout ce que lisent l'app et le widget, en une seule requête Redis (5 commandes). */
 export async function readLive(now) {
   const d = day(now);
-  const [live, liveu, limits, cost, sessions] = await pipeline([
+  const [live, liveu, limits, cost, sessions, approvals, remote] = await pipeline([
     ['HGETALL', 'live'],
     ['HGETALL', 'liveu'],
     ['GET', 'limits'],
     ['GET', `day:${d}:cost`],
     ['SCARD', `day:${d}:sessions`],
+    ['HGETALL', 'approvals'],
+    ['GET', 'remote'],
   ]);
   const usage = hashToObject(liveu);
   const snaps = Object.values(hashToObject(live)).map((v) => JSON.parse(v));
@@ -76,6 +78,8 @@ export async function readLive(now) {
     usage: Object.fromEntries(Object.entries(usage).map(([k, v]) => [k, JSON.parse(v)])),
     limits: limits ? JSON.parse(limits) : null,
     today: { costUsd: Math.round(Number(cost || 0) * 100) / 100, sessions: Number(sessions || 0) },
+    approvals: Object.values(hashToObject(approvals)).map((v) => JSON.parse(v)),
+    remote: remote === '1',
   };
 }
 
@@ -90,7 +94,7 @@ export async function prune(sids) {
 
 // Tokens par session (hash « tokens » : sid -> { jour: { modèle: [entrée, sortie, cache 5 min, cache 1 h, lecture] } }).
 export async function saveTokens(sessions) {
-  await pipeline(sessions.map((s) => ['HSET', 'tokens', s.sid, JSON.stringify(s.days)]));
+  await pipeline(sessions.map((s) => ['HSET', 'tokens', s.sid, JSON.stringify({ project: s.project ?? null, days: s.days })]));
 }
 
 export async function readTokens() {
@@ -112,3 +116,38 @@ export async function readSessionTokens(sid) {
     return null;
   }
 }
+
+/** Vrai la première fois seulement (clé posée pour ttl secondes) : évite les alertes en double. */
+export async function once(key, ttl) {
+  return (await redis('SET', key, '1', 'NX', 'EX', ttl)) === 'OK';
+}
+
+// Validation à distance : appr:<id> (lu par le Mac qui attend) et hash « approvals » (lu par l'iPhone).
+export async function createApproval(a, ttl) {
+  await pipeline([
+    ['SET', `appr:${a.id}`, JSON.stringify(a), 'EX', ttl],
+    ['HSET', 'approvals', a.id, JSON.stringify(a)],
+  ]);
+}
+
+export const getApproval = (id) => getJSON(`appr:${id}`);
+
+export async function decideApproval(id, decision) {
+  const a = await getApproval(id);
+  if (!a || a.decision !== 'pending') return a;
+  a.decision = decision;
+  a.decidedAt = Math.floor(Date.now() / 1000);
+  await pipeline([
+    ['SET', `appr:${id}`, JSON.stringify(a), 'EX', 300],
+    ['HDEL', 'approvals', id],
+  ]);
+  return a;
+}
+
+export async function dropApprovals(ids) {
+  if (!ids.length) return;
+  await pipeline([['HDEL', 'approvals', ...ids], ...ids.map((id) => ['DEL', `appr:${id}`])]);
+}
+
+export const setRemote = (on, ttl) => (on ? redis('SET', 'remote', '1', 'EX', ttl) : redis('DEL', 'remote'));
+export const getRemote = async () => (await redis('GET', 'remote')) === '1';

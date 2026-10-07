@@ -112,7 +112,7 @@ test('publicSession : clés attendues par Swift et usage fusionné', () => {
   const p = publicSession(snapshot(s), { costUsd: 1.234, contextPct: 41.6, model: 'Opus', title: 'Refonte' }, sec(90));
   assert.deepEqual(Object.keys(p).sort(), [
     'activity', 'agents', 'contextPct', 'costUsd', 'currentStep', 'duration', 'etaSeconds', 'model', 'project',
-    'sid', 'startedAt', 'status', 'stepsDone', 'stepsTotal', 'title', 'updatedAt', 'workflow',
+    'sid', 'startedAt', 'status', 'stepsDone', 'stepsTotal', 'summary', 'title', 'updatedAt', 'workflow',
   ]);
   assert.equal(p.costUsd, 1.23);
   assert.equal(p.contextPct, 42);

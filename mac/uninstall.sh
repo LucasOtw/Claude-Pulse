@@ -14,7 +14,7 @@ if [ -f "$SETTINGS" ]; then
   TMP=$(mktemp)
   jq --arg hook "$DIR/hook.sh" --arg inner "$INNER" '
     if .hooks then
-      .hooks |= (with_entries(.value |= map(select((.hooks // []) | all(.command != $hook))))
+      .hooks |= (with_entries(.value |= map(select((.hooks // []) | all((.command // "") | contains("/claude-pulse/") | not))))
                  | with_entries(select(.value | length > 0)))
       | if .hooks == {} then del(.hooks) else . end
     else . end

@@ -19,6 +19,7 @@ function exec([cmd, ...a]) {
     }
     case 'DEL': return kv.delete(a[0]) ? 1 : 0;
     case 'EXPIRE': return 1;
+    case 'EXISTS': return kv.has(a[0]) ? 1 : 0;
     case 'INCRBYFLOAT': { const v = Number(kv.get(a[0]) ?? 0) + Number(a[1]); kv.set(a[0], String(v)); return String(v); }
     case 'SADD': { const s = sets.get(a[0]) ?? new Set(); s.add(a[1]); sets.set(a[0], s); return 1; }
     case 'SCARD': return sets.get(a[0])?.size ?? 0;
@@ -41,10 +42,28 @@ const redisServer = http.createServer((req, res) => {
   });
 });
 
+// --- Faux ntfy ---
+const notifications = [];
+const ntfyServer = http.createServer((req, res) => {
+  let body = '';
+  req.on('data', (c) => (body += c));
+  req.on('end', () => {
+    notifications.push(JSON.parse(body));
+    res.end('{}');
+  });
+});
+
 let api;
 before(async () => {
   const port = await new Promise((r) => redisServer.listen(0, '127.0.0.1', () => r(redisServer.address().port)));
-  Object.assign(process.env, { KV_REST_API_URL: `http://127.0.0.1:${port}`, KV_REST_API_TOKEN: 'x', PULSE_TOKEN: 'secret' });
+  const ntfyPort = await new Promise((r) => ntfyServer.listen(0, '127.0.0.1', () => r(ntfyServer.address().port)));
+  Object.assign(process.env, {
+    KV_REST_API_URL: `http://127.0.0.1:${port}`,
+    KV_REST_API_TOKEN: 'x',
+    PULSE_TOKEN: 'secret',
+    NTFY_URL: `http://127.0.0.1:${ntfyPort}`,
+    NTFY_TOPIC: 'pulse-test',
+  });
   api = {
     hook: (await import('../api/hook.js')).default,
     usage: (await import('../api/usage.js')).default,
@@ -52,9 +71,15 @@ before(async () => {
     tokens: (await import('../api/tokens.js')).default,
     stats: (await import('../api/stats.js')).default,
     session: (await import('../api/session.js')).default,
+    approval: (await import('../api/approval.js')).default,
+    decide: (await import('../api/decide.js')).default,
+    remote: (await import('../api/remote.js')).default,
   };
 });
-after(() => redisServer.close());
+after(() => {
+  redisServer.close();
+  ntfyServer.close();
+});
 
 function call(handler, method, body, token = 'secret', query = {}) {
   return new Promise((resolve) => {
@@ -87,7 +112,7 @@ test('scénario complet : usage, hooks, lecture par l’iPhone', async () => {
 
   commands.length = 0;
   const st = await call(api.state, 'GET');
-  assert.equal(commands.length, 5, 'une lecture = 5 commandes Redis');
+  assert.equal(commands.length, 7, 'une lecture = 7 commandes Redis');
   assert.equal(st.data.limits.fiveHour.pct, 23.5);
   assert.equal(st.data.limits.sevenDay, null);
   assert.deepEqual(st.data.today, { costUsd: 1.5, sessions: 1 });
@@ -156,4 +181,53 @@ test('vue détaillée d’une session', async () => {
   assert.equal(r.data.tokens.costUsd, 20);
   assert.equal((await call(api.session, 'GET', null, 'secret', { sid: 'inconnue' })).status, 404);
   assert.equal((await call(api.session, 'GET', null, 'secret', {})).status, 400);
+});
+
+test('ntfy : validation demandée, fin de tâche, limite 80 % et remise à zéro (une seule fois)', async () => {
+  notifications.length = 0;
+  const sid = 'ntfy-1';
+  await call(api.hook, 'POST', { e: 'UserPromptSubmit', sid, project: 'App' });
+  await call(api.hook, 'POST', { e: 'Notification', sid, ntype: 'permission_prompt', message: 'Claude needs your permission to use Bash' });
+  assert.equal(notifications.at(-1).title, 'App attend ta validation');
+  assert.equal(notifications.at(-1).topic, 'pulse-test');
+
+  const resetsAt = Math.floor(Date.now() / 1000) + 3600;
+  const reading = { sid, costUsd: 1, contextPct: 10, fiveHour: { pct: 82, resetsAt } };
+  await call(api.usage, 'POST', reading);
+  await call(api.usage, 'POST', { ...reading, fiveHour: { pct: 85, resetsAt } });
+  const limit = notifications.filter((n) => n.title.startsWith('Limite'));
+  assert.deepEqual(limit.map((n) => n.title), ['Limite 5 h à 82 %', 'Limite 5 h remise à zéro']);
+  assert.equal(limit[1].delay, String(resetsAt), 'remise à zéro programmée chez ntfy');
+
+  const st = (await call(api.state, 'GET')).data;
+  assert.equal(st.ntfy, true);
+  assert.ok(st.limits.updatedAt > 0, 'âge du relevé des limites');
+});
+
+test('validation à distance : éteinte, allumée, garde-fou, décision', async () => {
+  const ask = (input) => call(api.approval, 'POST', { sid: 's', project: 'App', tool: 'Bash', input });
+  assert.equal((await ask({ command: 'npm test' })).data.remote, false, 'éteinte par défaut');
+
+  assert.equal((await call(api.remote, 'POST', { on: true })).data.on, true);
+  const ok = (await ask({ command: 'npm test', description: 'Run tests' })).data;
+  const risky = (await ask({ command: 'rm -rf build' })).data;
+  assert.equal(ok.remote, true);
+
+  let st = (await call(api.state, 'GET')).data;
+  assert.equal(st.remote, true);
+  assert.deepEqual(st.approvals.map((a) => [a.text, a.danger]), [['npm test', false], ['rm -rf build', true]]);
+
+  // Commande sensible : refus possible, autorisation impossible depuis le téléphone.
+  assert.equal((await call(api.decide, 'POST', { id: risky.id, allow: true })).status, 403);
+  assert.equal((await call(api.decide, 'POST', { id: risky.id, allow: false })).data.decision, 'deny');
+
+  assert.equal((await call(api.approval, 'GET', null, 'secret', { id: ok.id })).data.decision, 'pending');
+  assert.equal((await call(api.decide, 'POST', { id: ok.id, allow: true })).data.decision, 'allow');
+  assert.equal((await call(api.approval, 'GET', null, 'secret', { id: ok.id })).data.decision, 'allow');
+  assert.equal((await call(api.decide, 'POST', { id: ok.id, allow: false })).status, 409, 'une seule réponse');
+
+  st = (await call(api.state, 'GET')).data;
+  assert.equal(st.approvals.length, 0);
+  await call(api.remote, 'POST', { on: false });
+  assert.equal((await ask({ command: 'ls' })).data.remote, false);
 });

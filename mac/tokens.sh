@@ -33,7 +33,8 @@ for f in "$@"; do
   fi
   days=$(cat "${files[@]}" 2>/dev/null | jq -nRc -f "$DIR/tokens.jq" 2>/dev/null) || continue
   [ -n "$days" ] && [ "$days" != "{}" ] || continue
-  batch+=("$(jq -cn --arg sid "$sid" --argjson days "$days" '{sid: $sid, days: $days}')")
+  project=$(jq -nRr '[inputs | fromjson? | .cwd? // empty | select(type == "string")] | first // "" | split("/") | last' "$f" 2>/dev/null)
+  batch+=("$(jq -cn --arg sid "$sid" --arg project "$project" --argjson days "$days" '{sid: $sid, project: (if $project == "" then null else $project end), days: $days}')")
   [ ${#batch[@]} -ge 40 ] && flush
 done
 flush

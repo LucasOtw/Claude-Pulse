@@ -17,8 +17,8 @@ TOKEN="${2:-}"
 URL="${URL%/}"
 
 mkdir -p "$DIR"
-cp "$SRC/hook.sh" "$SRC/statusline.sh" "$SRC/tokens.sh" "$SRC/tokens.jq" "$SRC/backfill.sh" "$DIR/"
-chmod +x "$DIR/hook.sh" "$DIR/statusline.sh" "$DIR/tokens.sh" "$DIR/backfill.sh"
+cp "$SRC/hook.sh" "$SRC/statusline.sh" "$SRC/tokens.sh" "$SRC/tokens.jq" "$SRC/backfill.sh" "$SRC/approve.sh" "$DIR/"
+chmod +x "$DIR/hook.sh" "$DIR/statusline.sh" "$DIR/tokens.sh" "$DIR/backfill.sh" "$DIR/approve.sh"
 
 mkdir -p "$(dirname "$SETTINGS")"
 [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
@@ -34,16 +34,21 @@ if [[ "$INNER" == *claude-pulse* ]]; then
   fi
 fi
 
+# Tes autres réglages (PULSE_SUMMARY, PULSE_REMOTE_APPROVAL…) sont conservés.
+EXTRA=""
+[ -f "$DIR/config" ] && EXTRA=$(grep -vE '^(PULSE_URL|PULSE_TOKEN|PULSE_INNER_STATUSLINE)=' "$DIR/config" || true)
+
 umask 077
 {
   printf 'PULSE_URL=%q\n' "$URL"
   printf 'PULSE_TOKEN=%q\n' "$TOKEN"
   [ -z "$INNER" ] || printf 'PULSE_INNER_STATUSLINE=%q\n' "$INNER"
+  [ -z "$EXTRA" ] || printf '%s\n' "$EXTRA"
 } > "$DIR/config"
 chmod 600 "$DIR/config"
 
 TMP=$(mktemp)
-jq --arg hook "$DIR/hook.sh" --arg sl "$DIR/statusline.sh" '
+jq --arg hook "$DIR/hook.sh" --arg approve "$DIR/approve.sh" --arg sl "$DIR/statusline.sh" '
   def entry($m): {hooks: [{type: "command", command: $hook, async: true}]}
     | if $m then . + {matcher: $m} else . end;
   def add($ev; $m):
@@ -59,6 +64,9 @@ jq --arg hook "$DIR/hook.sh" --arg sl "$DIR/statusline.sh" '
   | add("Stop"; null)
   | add("StopFailure"; null)
   | add("SessionEnd"; null)
+  # Validation à distance : hook synchrone, il peut attendre ta réponse sur le téléphone.
+  | .hooks.PermissionRequest = (((.hooks.PermissionRequest // []) | map(select((.hooks // []) | all(.command != $approve))))
+      + [{matcher: "*", hooks: [{type: "command", command: $approve, timeout: 600}]}])
   | .statusLine = {type: "command", command: $sl}
 ' "$SETTINGS" > "$TMP"
 mv "$TMP" "$SETTINGS"

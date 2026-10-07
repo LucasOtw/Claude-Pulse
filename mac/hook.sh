@@ -37,7 +37,7 @@ if [ "$event" = "PreToolUse" ]; then
   esac
 fi
 
-payload=$(printf '%s' "$input" | jq -c '
+payload=$(printf '%s' "$input" | jq -c --arg summary_on "${PULSE_SUMMARY:-0}" '
   def cut($n): if type == "string" then .[0:$n] else . end;
   def workflow:
     (.tool_input.script // "" | .[0:4000]) as $head
@@ -75,7 +75,14 @@ payload=$(printf '%s' "$input" | jq -c '
             else null end),
     workflow: (if .tool_name == "Workflow" then workflow else null end),
     bg: (if .background_tasks then [.background_tasks[] | {type, status, name: ((.name // .description // "") | cut(60))}] else null end),
-    error: (.error // .error_type // .reason // null | if type == "string" then .[0:60] else null end)
+    error: (.error // .error_type // .reason // null | if type == "string" then .[0:60] else null end),
+    # Résumé de fin de tâche (désactivé par défaut) : première phrase de la réponse de Claude.
+    summary: (if $summary_on == "1" and .hook_event_name == "Stop"
+      then (.last_assistant_message // ""
+        | gsub("```[\\s\\S]*?```"; " ") | gsub("[`*_#>|]"; "") | gsub("\\s+"; " ") | ltrimstr(" ")
+        | if length == 0 then null
+          else ((capture("^(?<s>.{12,180}?[.!?…])(\\s|$)") | .s) // .[0:160]) end)
+      else null end)
   }
   | with_entries(select(.value != null))' 2>/dev/null) || exit 0
 

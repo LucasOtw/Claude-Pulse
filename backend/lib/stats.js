@@ -22,7 +22,11 @@ export function buildStats(sessions, today) {
   let cost = 0;
   let since = null;
 
-  for (const days of Object.values(sessions)) {
+  const weekStart = shiftDay(today, -6);
+  const byProject = new Map(); // projet -> { week, total }
+  for (const entry of Object.values(sessions)) {
+    const { project, days } = entry && entry.days ? entry : { project: null, days: entry };
+    const name = project || 'Autre';
     for (const [day, models] of Object.entries(days || {})) {
       for (const [model, raw] of Object.entries(models || {})) {
         const t = ZERO().map((_, i) => Number(raw?.[i]) || 0);
@@ -34,6 +38,14 @@ export function buildStats(sessions, today) {
         byDay.set(day, { tokens: add(d.tokens, t), cost: d.cost + c });
         const m = byModel.get(model) ?? { tokens: ZERO(), cost: 0 };
         byModel.set(model, { tokens: add(m.tokens, t), cost: m.cost + c });
+        const p = byProject.get(name) ?? { project: name, weekTokens: 0, weekCostUsd: 0, tokens: 0, costUsd: 0 };
+        p.tokens += total(t);
+        p.costUsd += c;
+        if (day >= weekStart && day <= today) {
+          p.weekTokens += total(t);
+          p.weekCostUsd += c;
+        }
+        byProject.set(name, p);
       }
     }
   }
@@ -83,6 +95,9 @@ export function buildStats(sessions, today) {
     models: [...models.values()]
       .map((m) => ({ ...m, costUsd: round2(m.costUsd) }))
       .sort((a, b) => b.costUsd - a.costUsd),
+    projects: [...byProject.values()]
+      .map((p) => ({ ...p, weekCostUsd: round2(p.weekCostUsd), costUsd: round2(p.costUsd) }))
+      .sort((a, b) => b.weekTokens - a.weekTokens || b.tokens - a.tokens),
     sessions: Object.keys(sessions).length,
   };
 }
