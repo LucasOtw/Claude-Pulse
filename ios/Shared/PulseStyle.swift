@@ -293,3 +293,36 @@ struct StatusBadge: View {
             .background(color.opacity(0.16), in: Circle())
     }
 }
+
+// MARK: - Retours haptiques
+
+/// Règles communes : léger pour naviguer, net pour une action, notification pour un événement.
+enum PulseHaptics {
+    /// Évolution des sessions vue depuis l'app ouverte : validation demandée → avertissement,
+    /// tâche terminée → succès, erreur → erreur. Rien pour le reste.
+    static func sessions(old: [String: String], new: [String: String]) -> SensoryFeedback? {
+        // Premier chargement : rien ne « vient » de changer.
+        guard !old.isEmpty else { return nil }
+        var feedback: SensoryFeedback?
+        for (sid, status) in new where old[sid] != status {
+            switch status {
+            case "error": return .error
+            case "waiting": feedback = .warning
+            case "done" where old[sid] != nil: if feedback == nil { feedback = .success }
+            default: break
+            }
+        }
+        return feedback
+    }
+
+    /// Palier de limite (50 %, 75 %, 90 %) ; -1 tant que la limite est inconnue.
+    static func level(_ pct: Double?) -> Int {
+        guard let pct else { return -1 }
+        switch pct {
+        case ..<50: return 0
+        case ..<75: return 1
+        case ..<90: return 2
+        default: return 3
+        }
+    }
+}

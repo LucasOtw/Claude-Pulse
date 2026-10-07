@@ -35,6 +35,7 @@ struct SettingsView: View {
                     }
                     Footnote("« Auto » suit le thème de l'écran verrouillé. Le changement s'applique tout de suite si la surveillance tourne.")
                 }
+                .sensoryFeedback(.selection, trigger: theme)
                 .onChange(of: theme) { _, newValue in
                     Task { await monitor.setTheme(newValue) }
                 }

@@ -111,6 +111,7 @@ struct UsageDetailView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 170)
+                .sensoryFeedback(.selection, trigger: metric)
             }
             Chart(s.days) { d in
                 BarMark(

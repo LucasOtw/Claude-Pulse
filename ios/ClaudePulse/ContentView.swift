@@ -8,10 +8,14 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showDetail = false
     @State private var selected: PulseState.Session?
+    @State private var refreshes = 0
 
     private var sessions: [PulseState.Session] { monitor.state?.sessions ?? [] }
     private var active: [PulseState.Session] { sessions.filter(\.isActive) }
     private var recent: [PulseState.Session] { sessions.filter { !$0.isActive } }
+    private var statuses: [String: String] {
+        Dictionary(sessions.map { ($0.sid, $0.status) }, uniquingKeysWith: { a, _ in a })
+    }
 
     var body: some View {
         ScrollView {
@@ -80,7 +84,17 @@ struct ContentView: View {
             Header(onSettings: { showSettings = true }, onRefresh: { Task { await monitor.refresh() } })
         }
         .background(PulseStyle.background.ignoresSafeArea())
-        .refreshable { await monitor.refresh() }
+        .refreshable {
+            await monitor.refresh()
+            refreshes += 1
+        }
+        // Retours haptiques : ouvrir un détail, fin d'un tirer-pour-rafraîchir,
+        // Claude qui attend ta validation ou qui termine, erreur.
+        .sensoryFeedback(.impact(flexibility: .soft), trigger: showDetail) { _, open in open }
+        .sensoryFeedback(.impact(flexibility: .soft), trigger: selected?.id) { _, id in id != nil }
+        .sensoryFeedback(.impact(weight: .light), trigger: refreshes)
+        .sensoryFeedback(trigger: statuses) { old, new in PulseHaptics.sessions(old: old, new: new) }
+        .sensoryFeedback(trigger: monitor.lastError) { _, error in error == nil ? nil : .error }
         .task { await monitor.refresh() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active && !monitor.isRunning { Task { await monitor.refresh() } }
@@ -131,9 +145,13 @@ struct CircleButton: View {
     let symbol: String
     let label: String
     let action: () -> Void
+    @State private var taps = 0
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            taps += 1
+            action()
+        } label: {
             Image(systemName: symbol)
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(PulseStyle.textPrimary)
@@ -141,6 +159,7 @@ struct CircleButton: View {
                 .glassCircle()
         }
         .buttonStyle(.plain)
+        .sensoryFeedback(.impact(weight: .light), trigger: taps)
         .accessibilityLabel(label)
     }
 }
@@ -214,6 +233,7 @@ struct LimitHero: View {
         .padding(18)
         .background(PulseStyle.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .sensoryFeedback(trigger: PulseHaptics.level(limit?.pct)) { old, new in old >= 0 && new > old ? .warning : nil }
     }
 
     private func levelLabel(_ pct: Double) -> String {
@@ -260,8 +280,16 @@ struct WeekRow: View {
 struct MonitorCTA: View {
     @EnvironmentObject private var monitor: LiveMonitor
     @State private var busy = false
+    @State private var presses = 0
 
     var body: some View {
+        content
+            .sensoryFeedback(.impact(weight: .medium), trigger: presses)
+            .sensoryFeedback(trigger: monitor.isRunning) { _, running in running ? .success : nil }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if monitor.isRunning {
             HStack(spacing: 12) {
                 Image(systemName: "dot.radiowaves.left.and.right")
@@ -330,6 +358,7 @@ struct MonitorCTA: View {
 
     private func run(_ action: @escaping () async -> Void) {
         guard !busy else { return }
+        presses += 1
         busy = true
         Task {
             await action()

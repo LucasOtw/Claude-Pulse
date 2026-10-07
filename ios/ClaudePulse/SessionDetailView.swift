@@ -9,6 +9,7 @@ struct SessionDetailView: View {
     @State private var error: String?
 
     private var session: PulseState.Session { detail?.session ?? initial }
+    private var finishedAgents: Int { detail?.agents.filter { $0.status == "done" }.count ?? 0 }
 
     var body: some View {
         ScrollView {
@@ -32,6 +33,16 @@ struct SessionDetailView: View {
             .padding(.top, 8)
             .padding(.bottom, 32)
             .animation(.snappy, value: detail?.agents.map(\.status))
+            .sensoryFeedback(trigger: session.stepsDone) { old, new in new > old ? .success : nil }
+            .sensoryFeedback(trigger: finishedAgents) { old, new in new > old ? .impact(flexibility: .soft) : nil }
+            .sensoryFeedback(trigger: session.status) { _, status in
+                switch status {
+                case "waiting": return .warning
+                case "done": return .success
+                case "error": return .error
+                default: return nil
+                }
+            }
         }
         .scrollIndicators(.hidden)
         .safeAreaInset(edge: .top, spacing: 0) {
