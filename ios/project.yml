@@ -1,4 +1,4 @@
-# Génère ClaudePulse.xcodeproj : lance ./setup.sh (ou `xcodegen` si Shared/PulseSecrets.swift existe déjà).
+# Génère ClaudePulse.xcodeproj : ./setup.sh la première fois, puis ../update.sh (ou ./generate.sh).
 # Fonctionne avec un Apple ID gratuit : pas de push, pas d'App Group, aucune capacité payante.
 name: ClaudePulse
 options:
@@ -7,11 +7,14 @@ options:
     iOS: "17.0"
   createIntermediateGroups: true
 
+# Ton équipe de signature (« Personal Team ») vit dans Local.xcconfig, écrit par generate.sh
+# et ignoré par git : elle survit aux régénérations du projet.
+configFiles:
+  Debug: Local.xcconfig
+  Release: Local.xcconfig
+
 settings:
   base:
-    # Ton équipe (« Personal Team » avec un Apple ID gratuit) : choisis-la dans Xcode,
-    # ou mets son identifiant ici pour ne pas avoir à la resélectionner après chaque xcodegen.
-    DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "1.0"

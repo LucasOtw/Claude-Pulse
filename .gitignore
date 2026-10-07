@@ -10,3 +10,4 @@ DerivedData/
 ios/Shared/PulseSecrets.swift
 ios/ClaudePulse/Info.plist
 ios/ClaudePulseWidgets/Info.plist
+ios/Local.xcconfig

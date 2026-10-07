@@ -29,9 +29,5 @@ case "$code" in
   *)   echo "⚠️  Backend injoignable (HTTP $code) : vérifie l'URL." ;;
 esac
 
-if ! command -v xcodegen >/dev/null; then
-  echo "❌ XcodeGen manquant : brew install xcodegen, puis relance ce script."
-  exit 1
-fi
-xcodegen
+./generate.sh
 open ClaudePulse.xcodeproj

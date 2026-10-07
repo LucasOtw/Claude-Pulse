@@ -74,11 +74,21 @@ Relance tes sessions Claude Code. Pour tout retirer : `./uninstall.sh`.
    ./setup.sh https://TON-PROJET.vercel.app TON_PULSE_TOKEN
    ```
    Le script écrit `ios/Shared/PulseSecrets.swift` (ignoré par git), génère `ClaudePulse.xcodeproj` et l'ouvre.
-4. Dans Xcode, pour les cibles **ClaudePulse** et **ClaudePulseWidgets** : *Signing & Capabilities* → **Team** = ton *Personal Team*. Si Xcode refuse le bundle ID, remplace `com.lucasotw` par autre chose dans `project.yml` et relance `./setup.sh`.
+4. Dans Xcode, pour les cibles **ClaudePulse** et **ClaudePulseWidgets** : *Signing & Capabilities* → **Team** = ton *Personal Team*. Une seule fois : `update.sh` la retient ensuite. Si Xcode refuse le bundle ID, remplace `com.lucasotw` par autre chose dans `project.yml` et relance `./setup.sh`.
 5. Branche l'iPhone, choisis-le comme destination, **Run** (⌘R).
 6. Au premier lancement, iOS bloque l'app : **Réglages → Général → VPN et gestion de l'appareil** → ton Apple ID → **Faire confiance**.
 7. Dans l'app : **Lancer la surveillance** → accepte les notifications → ⚙️ → **Démo : tâche en cours** → verrouille l'iPhone.
 8. Ajoute le widget : appui long sur l'écran d'accueil → **+** → *Claude Pulse*.
+
+### Mettre à jour
+
+Une seule commande, puis ⌘R dans Xcode :
+
+```bash
+~/claude-pulse/update.sh
+```
+
+Elle récupère la dernière version, met à jour les scripts Claude Code, régénère le projet Xcode en gardant ton équipe de signature et l'ouvre. Le backend se redéploie tout seul sur Vercel à chaque push sur `main`.
 
 ---
 
@@ -128,9 +138,11 @@ backend/
   lib/redis.js    Upstash REST, sans dépendance
 ios/
   setup.sh        écrit PulseSecrets.swift, génère et ouvre le projet
+  generate.sh     régénère le projet en gardant l'équipe (Local.xcconfig)
   Shared/         modèles, API, config, styles, attributs de la Live Activity
   ClaudePulse/    app : surveillance (LiveMonitor), son silencieux, notifications
   ClaudePulseWidgets/  widget + Live Activity / Dynamic Island
 mac/
   hook.sh  statusline.sh  install.sh  uninstall.sh
+update.sh         met tout à jour sur le Mac
 ```
