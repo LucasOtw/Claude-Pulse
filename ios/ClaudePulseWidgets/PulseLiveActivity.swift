@@ -8,9 +8,7 @@ struct PulseLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: PulseAttributes.self) { context in
             LockScreenView(state: context.state, isStale: context.isStale)
-                .environment(\.colorScheme, .dark)
-                .activityBackgroundTint(Color.black)
-                .activitySystemActionForegroundColor(.white)
+                .activityTheme(context.state.theme)
         } dynamicIsland: { context in
             let state = context.state
             let color = PulseStyle.color(for: state.status)
@@ -71,6 +69,25 @@ struct PulseLiveActivity: Widget {
 }
 
 // MARK: - Écran verrouillé
+
+extension View {
+    /// Noir, blanc, ou apparence de l'écran verrouillé (« auto »).
+    @ViewBuilder
+    func activityTheme(_ theme: String) -> some View {
+        switch theme {
+        case "light":
+            environment(\.colorScheme, .light)
+                .activityBackgroundTint(Color.white)
+                .activitySystemActionForegroundColor(.black)
+        case "auto":
+            activityBackgroundTint(PulseStyle.background)
+        default:
+            environment(\.colorScheme, .dark)
+                .activityBackgroundTint(Color.black)
+                .activitySystemActionForegroundColor(.white)
+        }
+    }
+}
 
 struct LockScreenView: View {
     let state: PulseAttributes.ContentState

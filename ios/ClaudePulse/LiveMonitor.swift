@@ -66,6 +66,15 @@ final class LiveMonitor: ObservableObject {
         loop = Task { [weak self] in await self?.run() }
     }
 
+    /// Change l'apparence de la Live Activity en cours, sans attendre le prochain relevé.
+    func setTheme(_ theme: PulseConfig.ActivityTheme) async {
+        PulseConfig.activityTheme = theme
+        objectWillChange.send()
+        guard var content = lastContent else { return }
+        content.theme = theme.rawValue
+        await push(content)
+    }
+
     func stop() async {
         loop?.cancel()
         loop = nil
@@ -200,7 +209,8 @@ final class LiveMonitor: ObservableObject {
             fiveHourResetsAt: resetsAt,
             startedAt: s.startedAt,
             duration: s.duration,
-            otherActive: state.activeSessions.filter { $0.sid != s.sid }.count
+            otherActive: state.activeSessions.filter { $0.sid != s.sid }.count,
+            theme: PulseConfig.activityTheme.rawValue
         )
     }
 }

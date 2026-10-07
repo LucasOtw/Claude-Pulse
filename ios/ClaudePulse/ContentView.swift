@@ -75,7 +75,7 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active && !monitor.isRunning { Task { await monitor.refresh() } }
         }
-        .sheet(isPresented: $showSettings) { SettingsView() }
+        .sheet(isPresented: $showSettings) { SettingsView().environmentObject(monitor) }
         .tint(PulseStyle.accent)
     }
 }

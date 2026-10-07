@@ -26,6 +26,8 @@ struct PulseAttributes: ActivityAttributes {
         var duration: String
         /// Autres sessions actives en parallèle
         var otherActive: Int
+        /// Apparence choisie dans l'app : "dark", "light" ou "auto"
+        var theme: String
     }
 
     var name: String
@@ -52,12 +54,12 @@ extension PulseAttributes.ContentState {
         Self(project: "Claude Code", status: "idle", activity: "En attente d'une tâche", currentStep: "",
              stepsDone: 0, stepsTotal: 0, agents: 0, workflow: "", estimatedEndAt: 0, fiveHourPct: fiveHourPct,
              fiveHourResetsAt: fiveHourResetsAt, startedAt: Date().timeIntervalSince1970, duration: "",
-             otherActive: 0)
+             otherActive: 0, theme: PulseConfig.activityTheme.rawValue)
     }
 
     static let preview = Self(
         project: "Studio_Granit", status: "running", activity: "Modifie des fichiers", currentStep: "Écriture des tests",
         stepsDone: 2, stepsTotal: 5, agents: 2, workflow: "", estimatedEndAt: Date().addingTimeInterval(380).timeIntervalSince1970, fiveHourPct: 23,
-        fiveHourResetsAt: Date().addingTimeInterval(7200).timeIntervalSince1970, startedAt: Date().addingTimeInterval(-240).timeIntervalSince1970, duration: "4 min", otherActive: 1
+        fiveHourResetsAt: Date().addingTimeInterval(7200).timeIntervalSince1970, startedAt: Date().addingTimeInterval(-240).timeIntervalSince1970, duration: "4 min", otherActive: 1, theme: "dark"
     )
 }

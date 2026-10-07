@@ -4,7 +4,9 @@ import SwiftUI
 /// bouton rond de fermeture, titre centré, groupes de lignes.
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var monitor: LiveMonitor
     @State private var message: String?
+    @State private var theme = PulseConfig.activityTheme
 
     var body: some View {
         ScrollView {
@@ -15,6 +17,28 @@ struct SettingsView: View {
                     InfoRow(symbol: "key", title: "Jeton", value: PulseConfig.isConfigured ? "••••" + String(PulseConfig.token.suffix(4)) : "Non configuré")
                 }
                 Footnote("Pour changer : relance ios/setup.sh sur le Mac, puis ⌘R dans Xcode.")
+
+                VStack(alignment: .leading, spacing: 10) {
+                    SectionLabel(title: "Live Activity")
+                    RowGroup {
+                        HStack(spacing: 12) {
+                            RowIcon(symbol: "circle.lefthalf.filled")
+                            Text("Apparence").foregroundStyle(PulseStyle.textPrimary)
+                            Spacer()
+                            Picker("Apparence", selection: $theme) {
+                                ForEach(PulseConfig.ActivityTheme.allCases) { Text($0.label).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 190)
+                        }
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 16)
+                    }
+                    Footnote("« Auto » suit le thème de l'écran verrouillé. Le changement s'applique tout de suite si la surveillance tourne.")
+                }
+                .onChange(of: theme) { _, newValue in
+                    Task { await monitor.setTheme(newValue) }
+                }
 
                 VStack(alignment: .leading, spacing: 10) {
                     SectionLabel(title: "Démo")
