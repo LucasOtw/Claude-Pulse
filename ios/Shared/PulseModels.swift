@@ -34,6 +34,8 @@ struct PulseState: Codable {
         var contextPct: Int
         var model: String?
         var duration: String
+        /// Secondes Unix
+        var startedAt: Double
         var updatedAt: Double
 
         var id: String { sid }
@@ -44,7 +46,6 @@ struct PulseState: Codable {
     var limits: Limits
     var today: Today
     var sessions: [Session]
-    var pushReady: Bool?
 
     var activeSessions: [Session] { sessions.filter(\.isActive) }
 
@@ -59,8 +60,8 @@ struct PulseState: Codable {
             Session(sid: "1", project: "Studio_Granit", title: "Refonte accueil", status: "running",
                     activity: "Modifie des fichiers", currentStep: "Écriture du CSS", stepsDone: 2, stepsTotal: 5,
                     agents: 1, workflow: "", costUsd: 1.42, contextPct: 38, model: "Opus", duration: "12 min",
+                    startedAt: Date().addingTimeInterval(-720).timeIntervalSince1970,
                     updatedAt: Date().timeIntervalSince1970),
-        ],
-        pushReady: true
+        ]
     )
 }

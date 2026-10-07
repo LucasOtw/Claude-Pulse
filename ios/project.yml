@@ -1,14 +1,16 @@
-# Génère ClaudePulse.xcodeproj :  brew install xcodegen && xcodegen
+# Génère ClaudePulse.xcodeproj : lance ./setup.sh (ou `xcodegen` si Shared/PulseSecrets.swift existe déjà).
+# Fonctionne avec un Apple ID gratuit : pas de push, pas d'App Group, aucune capacité payante.
 name: ClaudePulse
 options:
   bundleIdPrefix: com.lucasotw
   deploymentTarget:
-    iOS: "17.2"
+    iOS: "17.0"
   createIntermediateGroups: true
 
 settings:
   base:
-    # ⚠️ Mets ici ton Team ID Apple (developer.apple.com > Membership), ou choisis l'équipe dans Xcode.
+    # Ton équipe (« Personal Team » avec un Apple ID gratuit) : choisis-la dans Xcode,
+    # ou mets son identifiant ici pour ne pas avoir à la resélectionner après chaque xcodegen.
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.0"
@@ -27,13 +29,9 @@ targets:
         CFBundleDisplayName: Claude Pulse
         UILaunchScreen: {}
         NSSupportsLiveActivities: true
-        NSSupportsLiveActivitiesFrequentUpdates: true
+        # Le son silencieux garde l'app éveillée pour mettre à jour la Live Activity écran verrouillé.
+        UIBackgroundModes: [audio]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-    entitlements:
-      path: ClaudePulse/ClaudePulse.entitlements
-      properties:
-        aps-environment: development
-        com.apple.security.application-groups: [group.com.lucasotw.claudepulse]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lucasotw.claudepulse
@@ -50,10 +48,6 @@ targets:
         CFBundleDisplayName: Claude Pulse
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
-    entitlements:
-      path: ClaudePulseWidgets/ClaudePulseWidgets.entitlements
-      properties:
-        com.apple.security.application-groups: [group.com.lucasotw.claudepulse]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lucasotw.claudepulse.widgets

@@ -1,15 +1,22 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
-final class AppDelegate: NSObject, UIApplicationDelegate {
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        // Indispensable même quand iOS réveille l'app en arrière-plan après un push-to-start :
-        // c'est ici qu'on récupère le jeton de la nouvelle Live Activity pour le backend.
-        ActivityManager.shared.start()
+        UNUserNotificationCenter.current().delegate = self
         return true
+    }
+
+    // Affiche aussi les notifications quand l'app est ouverte.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
     }
 }
 
@@ -20,7 +27,7 @@ struct ClaudePulseApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(ActivityManager.shared)
+                .environmentObject(LiveMonitor.shared)
         }
     }
 }

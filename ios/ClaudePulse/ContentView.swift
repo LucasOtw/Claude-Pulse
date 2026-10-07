@@ -1,25 +1,30 @@
 import SwiftUI
-import WidgetKit
 
 struct ContentView: View {
-    @EnvironmentObject private var activities: ActivityManager
+    @EnvironmentObject private var monitor: LiveMonitor
     @Environment(\.scenePhase) private var scenePhase
-
-    @State private var state: PulseState? = PulseConfig.cachedState
-    @State private var errorMessage: String?
-    @State private var showSettings = !PulseConfig.isConfigured
+    @State private var showSettings = false
 
     var body: some View {
         NavigationStack {
             List {
-                if let errorMessage {
+                if !PulseConfig.isConfigured {
                     Section {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        Label("Lance ios/setup.sh avec l'URL du backend et ton PULSE_TOKEN, puis recompile.",
+                              systemImage: "wrench.and.screwdriver")
+                    }
+                }
+
+                MonitorSection()
+
+                if let error = monitor.lastError {
+                    Section {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.red)
                     }
                 }
 
-                if let state {
+                if let state = monitor.state {
                     Section("Limites d'abonnement") {
                         LimitRow(title: "5 heures", limit: state.limits.fiveHour)
                         LimitRow(title: "7 jours", limit: state.limits.sevenDay)
@@ -37,35 +42,51 @@ struct ContentView: View {
                         }
                         ForEach(state.sessions) { SessionRow(session: $0) }
                     }
-                } else if PulseConfig.isConfigured {
-                    ProgressView()
-                } else {
-                    Text("Configure le backend dans les réglages ⚙️")
                 }
             }
             .navigationTitle("Claude Pulse")
             .toolbar {
                 Button { showSettings = true } label: { Image(systemName: "gearshape") }
             }
-            .refreshable { await load() }
-            .task { await load() }
+            .refreshable { await monitor.refresh() }
+            .task { await monitor.refresh() }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { Task { await load() } }
+                if phase == .active && !monitor.isRunning { Task { await monitor.refresh() } }
             }
-            .sheet(isPresented: $showSettings, onDismiss: { Task { await load() } }) {
-                SettingsView().environmentObject(activities)
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
             }
         }
     }
+}
 
-    private func load() async {
-        guard PulseConfig.isConfigured else { return }
-        do {
-            state = try await PulseAPI.fetchState()
-            errorMessage = nil
-            WidgetCenter.shared.reloadAllTimelines()
-        } catch {
-            errorMessage = error.localizedDescription
+struct MonitorSection: View {
+    @EnvironmentObject private var monitor: LiveMonitor
+
+    var body: some View {
+        Section {
+            if monitor.isRunning {
+                Label("Surveillance active", systemImage: "dot.radiowaves.left.and.right")
+                    .foregroundStyle(.green)
+                if let last = monitor.lastUpdate {
+                    Text("Dernière mise à jour \(Text(last, style: .relative))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Button("Arrêter la surveillance", role: .destructive) {
+                    Task { await monitor.stop() }
+                }
+            } else {
+                Button {
+                    Task { await monitor.start() }
+                } label: {
+                    Label("Lancer la surveillance", systemImage: "play.circle.fill")
+                        .font(.headline)
+                }
+                .disabled(!PulseConfig.isConfigured)
+            }
+        } footer: {
+            Text("Affiche une Live Activity sur l'écran verrouillé et dans la Dynamic Island, et te notifie quand Claude attend ta validation ou a terminé. Elle reste active jusqu'à 8 h (limite d'iOS) ; balaie-la pour l'arrêter.")
         }
     }
 }
@@ -143,5 +164,5 @@ struct SessionRow: View {
 }
 
 #Preview {
-    ContentView().environmentObject(ActivityManager.shared)
+    ContentView().environmentObject(LiveMonitor.shared)
 }

@@ -1,66 +1,47 @@
 import { redis, pipeline, getJSON } from './redis.js';
+import { snapshot } from './state.js';
 
 const TZ = process.env.PULSE_TZ || 'Europe/Paris';
 const SESSION_TTL = 2 * 24 * 3600;
-const ACTIVE_WINDOW_MS = 6 * 3600 * 1000;
+const DAY_TTL = 40 * 24 * 3600;
+
+// Clés Redis :
+//   s:<sid>     état complet d'une session (machine à états, sous verrou)
+//   u:<sid>     dernier relevé de la status line (coût, contexte, modèle)
+//   live        hash sid -> snapshot() de chaque session  } lus ensemble par GET /api/state,
+//   liveu       hash sid -> usage de chaque session       } en une seule requête
+//   limits      limites 5 h / 7 jours du compte
+//   day:<date>:cost / day:<date>:sessions
 
 export const day = (now) => new Intl.DateTimeFormat('sv-SE', { timeZone: TZ }).format(new Date(now));
-
-// L'usage (coût, contexte, modèle) vit dans sa propre clé u:<sid>, écrite par la status line
-// sans verrou ; on le fusionne dans la session à la lecture.
-const merge = (rawSession, rawUsage) => {
-  if (!rawSession) return null;
-  const s = JSON.parse(rawSession);
-  if (rawUsage) {
-    const u = JSON.parse(rawUsage);
-    s.usage = { costUsd: u.costUsd, contextPct: u.contextPct, model: u.model };
-    if (!s.title && u.title) s.title = u.title;
-  }
-  return s;
-};
 
 export async function loadSession(sid) {
   const [raw, usage] = await pipeline([
     ['GET', `s:${sid}`],
     ['GET', `u:${sid}`],
   ]);
-  return merge(raw, usage);
+  if (!raw) return null;
+  const s = JSON.parse(raw);
+  if (usage) s.usage = JSON.parse(usage);
+  return s;
 }
 
-export async function saveSession(s, now) {
+export async function saveSession(s) {
   const { usage, ...rest } = s;
   await pipeline([
     ['SET', `s:${s.sid}`, JSON.stringify(rest), 'EX', SESSION_TTL],
-    ['ZADD', 'sessions', now, s.sid],
-    ['ZREMRANGEBYSCORE', 'sessions', '-inf', now - SESSION_TTL * 1000],
+    ['HSET', 'live', s.sid, JSON.stringify(snapshot(s))],
   ]);
-}
-
-export async function listSessions(now) {
-  const ids = await redis('ZREVRANGEBYSCORE', 'sessions', '+inf', now - ACTIVE_WINDOW_MS, 'LIMIT', 0, 10);
-  if (!ids.length) return [];
-  const raw = await redis('MGET', ...ids.flatMap((id) => [`s:${id}`, `u:${id}`]));
-  const out = [];
-  for (let i = 0; i < raw.length; i += 2) {
-    const s = merge(raw[i], raw[i + 1]);
-    if (s) out.push(s);
-  }
-  return out;
 }
 
 export const getUsage = (sid) => getJSON(`u:${sid}`);
 
-/**
- * Enregistre un relevé de la status line en une seule requête :
- * usage de la session, limites du compte, coût du jour, session créée si inconnue.
- */
-export async function recordUsage({ sid, usage, limits, costDelta, newSession }, now) {
+/** Enregistre un relevé de la status line : usage de la session, limites du compte, coût du jour. */
+export async function recordUsage({ sid, usage, limits, costDelta }, now) {
   const d = day(now);
-  const DAY_TTL = 40 * 24 * 3600;
   const cmds = [
     ['SET', `u:${sid}`, JSON.stringify(usage), 'EX', SESSION_TTL],
-    ['SET', `s:${sid}`, JSON.stringify(newSession), 'NX', 'EX', SESSION_TTL],
-    ['ZADD', 'sessions', 'GT', now, sid],
+    ['HSET', 'liveu', sid, JSON.stringify(usage)],
     ['SADD', `day:${d}:sessions`, sid],
     ['EXPIRE', `day:${d}:sessions`, DAY_TTL],
   ];
@@ -69,20 +50,40 @@ export async function recordUsage({ sid, usage, limits, costDelta, newSession },
   await pipeline(cmds);
 }
 
-export const getLimits = () => getJSON('limits');
+// Upstash renvoie HGETALL sous forme de tableau plat [champ, valeur, champ, valeur…].
+const hashToObject = (h) => {
+  if (!h) return {};
+  if (!Array.isArray(h)) return h;
+  const o = {};
+  for (let i = 0; i < h.length; i += 2) o[h[i]] = h[i + 1];
+  return o;
+};
 
-export async function today(now) {
+/** Tout ce que lisent l'app et le widget, en une seule requête Redis (5 commandes). */
+export async function readLive(now) {
   const d = day(now);
-  const [cost, sessions] = await pipeline([
+  const [live, liveu, limits, cost, sessions] = await pipeline([
+    ['HGETALL', 'live'],
+    ['HGETALL', 'liveu'],
+    ['GET', 'limits'],
     ['GET', `day:${d}:cost`],
     ['SCARD', `day:${d}:sessions`],
   ]);
-  return { costUsd: Math.round(Number(cost || 0) * 100) / 100, sessions: Number(sessions || 0) };
+  const usage = hashToObject(liveu);
+  const snaps = Object.values(hashToObject(live)).map((v) => JSON.parse(v));
+  return {
+    snaps,
+    usage: Object.fromEntries(Object.entries(usage).map(([k, v]) => [k, JSON.parse(v)])),
+    limits: limits ? JSON.parse(limits) : null,
+    today: { costUsd: Math.round(Number(cost || 0) * 100) / 100, sessions: Number(sessions || 0) },
+  };
 }
 
-export const getStartToken = () => redis('GET', 'tok:start');
-export const setStartToken = (t) => redis('SET', 'tok:start', t);
-export const delStartToken = () => redis('DEL', 'tok:start');
-export const getActivityToken = (sid) => redis('GET', `tok:la:${sid}`);
-export const setActivityToken = (sid, t) => redis('SET', `tok:la:${sid}`, t, 'EX', 12 * 3600);
-export const delActivityToken = (sid) => redis('DEL', `tok:la:${sid}`);
+/** Oublie les sessions trop anciennes des hashes « live ». */
+export async function prune(sids) {
+  if (sids.length === 0) return;
+  await pipeline([
+    ['HDEL', 'live', ...sids],
+    ['HDEL', 'liveu', ...sids],
+  ]);
+}
