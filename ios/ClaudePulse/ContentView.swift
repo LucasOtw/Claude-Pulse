@@ -29,7 +29,7 @@ struct ContentView: View {
                     InfoRow(symbol: "terminal", title: "Sessions aujourd'hui", value: monitor.state.map { "\($0.today.sessions)" } ?? "—")
                 }
 
-                MonitorToggle()
+                MonitorCTA()
 
                 if let error = monitor.lastError {
                     NoticeCard(symbol: "exclamationmark.triangle", text: error, tint: PulseStyle.critical)
@@ -103,11 +103,18 @@ struct Header: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(PulseStyle.background.opacity(0.94))
+        // Fondu vers le haut : le contenu glisse sous les boutons de verre sans gêner le titre.
+        .background(
+            LinearGradient(
+                colors: [PulseStyle.background, PulseStyle.background.opacity(0.85), PulseStyle.background.opacity(0)],
+                startPoint: .top, endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .top)
+        )
     }
 }
 
-/// Bouton rond flottant blanc, ombre douce (comme dans l'app Claude).
+/// Bouton rond en Liquid Glass (iOS 26) ; bouton blanc flottant sur les versions plus anciennes.
 struct CircleButton: View {
     let symbol: String
     let label: String
@@ -119,11 +126,33 @@ struct CircleButton: View {
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(PulseStyle.textPrimary)
                 .frame(width: 44, height: 44)
-                .background(PulseStyle.floating, in: Circle())
-                .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
+                .glassCircle()
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+}
+
+extension View {
+    /// Verre liquide interactif en cercle, ou pastille blanche ombrée avant iOS 26.
+    @ViewBuilder
+    func glassCircle() -> some View {
+        if #available(iOS 26.0, *) {
+            glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            background(PulseStyle.floating, in: Circle())
+                .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
+        }
+    }
+
+    /// Verre liquide en capsule, ou capsule grise avant iOS 26.
+    @ViewBuilder
+    func glassCapsule() -> some View {
+        if #available(iOS 26.0, *) {
+            glassEffect(.regular.interactive(), in: Capsule())
+        } else {
+            background(PulseStyle.cardRaised, in: Capsule())
+        }
     }
 }
 
@@ -211,43 +240,84 @@ struct WeekRow: View {
 
 // MARK: - Surveillance
 
-/// Interrupteur façon « Web search » de l'app Claude.
-struct MonitorToggle: View {
+/// Bouton d'action : « Lancer la surveillance » en pêche, puis l'état actif avec « Arrêter ».
+struct MonitorCTA: View {
     @EnvironmentObject private var monitor: LiveMonitor
+    @State private var busy = false
 
     var body: some View {
-        RowGroup {
+        if monitor.isRunning {
             HStack(spacing: 12) {
-                RowIcon(symbol: monitor.isRunning ? "dot.radiowaves.left.and.right" : "bell.badge")
-                    .symbolEffect(.variableColor.iterative, options: .repeating, isActive: monitor.isRunning)
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(PulseStyle.good)
+                    .symbolEffect(.variableColor.iterative, options: .repeating)
+                    .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Surveillance")
+                    Text("Surveillance active")
+                        .font(.body.weight(.medium))
                         .foregroundStyle(PulseStyle.textPrimary)
-                    Group {
-                        if monitor.isRunning, let last = monitor.lastUpdate {
-                            Text("Active · mise à jour \(Text(last, style: .relative))")
-                        } else {
-                            Text("Live Activity et notifications, jusqu'à 8 h")
-                        }
+                    if let last = monitor.lastUpdate {
+                        Text("Mise à jour \(Text(last, style: .relative))")
+                            .font(.caption)
+                            .foregroundStyle(PulseStyle.textSecondary)
                     }
-                    .font(.caption)
-                    .foregroundStyle(PulseStyle.textSecondary)
                 }
                 Spacer()
-                Toggle("Surveillance", isOn: Binding(
-                    get: { monitor.isRunning },
-                    set: { on in
-                        Task {
-                            if on { await monitor.start() } else { await monitor.stop() }
-                        }
-                    }
-                ))
-                .labelsHidden()
-                .tint(PulseStyle.peach)
-                .disabled(!PulseConfig.isConfigured)
+                Button {
+                    run { await monitor.stop() }
+                } label: {
+                    Text("Arrêter")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(PulseStyle.textPrimary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 9)
+                        .glassCapsule()
+                }
+                .buttonStyle(.plain)
             }
             .padding(.vertical, 12)
             .padding(.horizontal, 16)
+            .background(PulseStyle.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        } else {
+            VStack(spacing: 8) {
+                Button {
+                    run { await monitor.start() }
+                } label: {
+                    HStack(spacing: 8) {
+                        if busy {
+                            ProgressView().tint(.white)
+                        } else {
+                            Image(systemName: "waveform.path.ecg")
+                        }
+                        Text("Lancer la surveillance")
+                    }
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(PulseStyle.peach, in: Capsule())
+                    .shadow(color: PulseStyle.peach.opacity(0.35), radius: 12, y: 4)
+                }
+                .buttonStyle(.plain)
+                .disabled(!PulseConfig.isConfigured || busy)
+                .opacity(PulseConfig.isConfigured ? 1 : 0.45)
+
+                Text("Live Activity et notifications quand Claude attend ta validation ou a terminé, pendant 8 h.")
+                    .font(.caption)
+                    .foregroundStyle(PulseStyle.textTertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 12)
+            }
+        }
+    }
+
+    private func run(_ action: @escaping () async -> Void) {
+        guard !busy else { return }
+        busy = true
+        Task {
+            await action()
+            busy = false
         }
     }
 }
