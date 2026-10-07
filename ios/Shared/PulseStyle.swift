@@ -98,6 +98,27 @@ enum PulseStyle {
         date.formatted(.dateTime.hour().minute().locale(fr))
     }
 
+    /// « 1 234,56 $ »
+    static func dollars(_ usd: Double, decimals: Int = 2) -> String {
+        usd.formatted(.number.precision(.fractionLength(decimals)).locale(fr)) + " $"
+    }
+
+    /// « 12,4 M », « 850 k », « 512 »
+    static func tokens(_ n: Int) -> String {
+        let v = Double(n)
+        switch v {
+        case 1_000_000_000...: return (v / 1e9).formatted(.number.precision(.fractionLength(1)).locale(fr)) + " Md"
+        case 1_000_000...: return (v / 1e6).formatted(.number.precision(.fractionLength(1)).locale(fr)) + " M"
+        case 10_000...: return (v / 1e3).formatted(.number.precision(.fractionLength(0)).locale(fr)) + " k"
+        default: return n.formatted(.number.locale(fr))
+        }
+    }
+
+    /// « 7 sept. »
+    static func shortDate(_ date: Date) -> String {
+        date.formatted(.dateTime.day().month(.abbreviated).locale(fr))
+    }
+
     /// « ≈ 6 min », « ≈ 1 h 20 », « < 1 min »
     static func remaining(_ seconds: Int) -> String {
         let min = Int((Double(seconds) / 60).rounded())

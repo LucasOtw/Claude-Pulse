@@ -11,9 +11,10 @@ git pull --ff-only --quiet
 echo "   $(git log -1 --format='%h · %s')"
 
 if [ -d "$HOME/.claude/claude-pulse" ]; then
-  cp mac/hook.sh mac/statusline.sh "$HOME/.claude/claude-pulse/"
-  chmod +x "$HOME/.claude/claude-pulse/hook.sh" "$HOME/.claude/claude-pulse/statusline.sh"
+  cp mac/hook.sh mac/statusline.sh mac/tokens.sh mac/tokens.jq mac/backfill.sh "$HOME/.claude/claude-pulse/"
+  chmod +x "$HOME/.claude/claude-pulse/"*.sh
   echo "✅ Scripts Claude Code à jour"
+  "$HOME/.claude/claude-pulse/backfill.sh"
 else
   echo "⚠️  Claude Code pas encore relié : lance une fois mac/install.sh"
 fi

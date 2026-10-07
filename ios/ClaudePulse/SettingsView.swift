@@ -5,7 +5,6 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var monitor: LiveMonitor
-    @State private var message: String?
     @State private var theme = PulseConfig.activityTheme
 
     var body: some View {
@@ -38,18 +37,6 @@ struct SettingsView: View {
                 }
                 .onChange(of: theme) { _, newValue in
                     Task { await monitor.setTheme(newValue) }
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    SectionLabel(title: "Démo")
-                    RowGroup {
-                        DemoRow(symbol: "sparkle", title: "Tâche en cours", step: "start", message: $message)
-                        RowDivider()
-                        DemoRow(symbol: "hand.raised", title: "Attente de validation", step: "waiting", message: $message)
-                        RowDivider()
-                        DemoRow(symbol: "checkmark.circle", title: "Tâche terminée", step: "end", message: $message)
-                    }
-                    Footnote(message ?? "Crée une fausse session « Démo ». Active la surveillance, puis verrouille l'iPhone pour voir la Live Activity changer.")
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
@@ -90,40 +77,7 @@ struct SettingsView: View {
     }
 }
 
-private struct DemoRow: View {
-    let symbol: String
-    let title: String
-    let step: String
-    @Binding var message: String?
-
-    var body: some View {
-        Button {
-            Task {
-                do {
-                    try await PulseAPI.sendTest(step: step)
-                    message = "Envoyé ✅ : la Live Activity se met à jour d'ici quelques secondes."
-                } catch {
-                    message = error.localizedDescription
-                }
-            }
-        } label: {
-            HStack(spacing: 12) {
-                RowIcon(symbol: symbol)
-                Text(title).foregroundStyle(PulseStyle.textPrimary)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(PulseStyle.textTertiary)
-            }
-            .padding(.vertical, 14)
-            .padding(.horizontal, 16)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct Footnote: View {
+struct Footnote: View {
     let text: String
     init(_ text: String) { self.text = text }
 

@@ -17,8 +17,8 @@ TOKEN="${2:-}"
 URL="${URL%/}"
 
 mkdir -p "$DIR"
-cp "$SRC/hook.sh" "$SRC/statusline.sh" "$DIR/"
-chmod +x "$DIR/hook.sh" "$DIR/statusline.sh"
+cp "$SRC/hook.sh" "$SRC/statusline.sh" "$SRC/tokens.sh" "$SRC/tokens.jq" "$SRC/backfill.sh" "$DIR/"
+chmod +x "$DIR/hook.sh" "$DIR/statusline.sh" "$DIR/tokens.sh" "$DIR/backfill.sh"
 
 mkdir -p "$(dirname "$SETTINGS")"
 [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
@@ -72,4 +72,5 @@ case "$code" in
   401) echo "⚠️  Le backend refuse le jeton : vérifie PULSE_TOKEN dans Vercel." ;;
   *)   echo "⚠️  Backend injoignable (HTTP $code) : vérifie l'URL." ;;
 esac
+[ "$code" = "200" ] && "$DIR/backfill.sh"
 echo "👉 Relance tes sessions Claude Code pour activer les hooks."

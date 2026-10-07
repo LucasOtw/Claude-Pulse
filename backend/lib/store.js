@@ -87,3 +87,19 @@ export async function prune(sids) {
     ['HDEL', 'liveu', ...sids],
   ]);
 }
+
+// Tokens par session (hash « tokens » : sid -> { jour: { modèle: [entrée, sortie, cache 5 min, cache 1 h, lecture] } }).
+export async function saveTokens(sessions) {
+  await pipeline(sessions.map((s) => ['HSET', 'tokens', s.sid, JSON.stringify(s.days)]));
+}
+
+export async function readTokens() {
+  const raw = hashToObject(await redis('HGETALL', 'tokens'));
+  const out = {};
+  for (const [sid, v] of Object.entries(raw)) {
+    try {
+      out[sid] = JSON.parse(v);
+    } catch {}
+  }
+  return out;
+}

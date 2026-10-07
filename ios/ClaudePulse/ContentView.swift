@@ -6,6 +6,7 @@ struct ContentView: View {
     @EnvironmentObject private var monitor: LiveMonitor
     @Environment(\.scenePhase) private var scenePhase
     @State private var showSettings = false
+    @State private var showDetail = false
 
     private var sessions: [PulseState.Session] { monitor.state?.sessions ?? [] }
     private var active: [PulseState.Session] { sessions.filter(\.isActive) }
@@ -21,7 +22,11 @@ struct ContentView: View {
                     )
                 }
 
-                LimitHero(limit: monitor.state?.limits.fiveHour)
+                Button { showDetail = true } label: {
+                    LimitHero(limit: monitor.state?.limits.fiveHour)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Ouvre le détail de ton utilisation")
 
                 RowGroup {
                     WeekRow(limit: monitor.state?.limits.sevenDay)
@@ -76,6 +81,7 @@ struct ContentView: View {
             if phase == .active && !monitor.isRunning { Task { await monitor.refresh() } }
         }
         .sheet(isPresented: $showSettings) { SettingsView().environmentObject(monitor) }
+        .sheet(isPresented: $showDetail) { UsageDetailView().environmentObject(monitor) }
         .tint(PulseStyle.accent)
     }
 }
@@ -194,10 +200,14 @@ struct LimitHero: View {
                 Text(limit.map { "Remise à zéro \(PulseStyle.resetTime($0.resetDate))" } ?? "Visible avec Pro ou Max")
                     .font(.subheadline)
                     .foregroundStyle(PulseStyle.textSecondary)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(PulseStyle.textTertiary)
             }
         }
         .padding(18)
         .background(PulseStyle.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     private func levelLabel(_ pct: Double) -> String {

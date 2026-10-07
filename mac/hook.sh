@@ -83,4 +83,11 @@ curl -sS -m 8 -X POST "$PULSE_URL/api/hook" \
   -H "Authorization: Bearer $PULSE_TOKEN" \
   -H "Content-Type: application/json" \
   --data-binary "$payload" >/dev/null 2>&1
+
+# Fin de tour : on recompte les tokens de la session (vue détaillée de l'app).
+if [ "$event" = "Stop" ] || [ "$event" = "SessionEnd" ]; then
+  transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty')
+  transcript="${transcript/#\~/$HOME}"
+  [ -n "$transcript" ] && "$(dirname "$0")/tokens.sh" "$transcript"
+fi
 exit 0

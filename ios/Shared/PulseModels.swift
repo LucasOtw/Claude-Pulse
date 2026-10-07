@@ -67,3 +67,60 @@ struct PulseState: Codable {
         ]
     )
 }
+
+/// Réponse de GET /api/stats : tokens lus dans les transcripts Claude Code du Mac.
+struct PulseStats: Codable {
+    struct Period: Codable {
+        var tokens: Int
+        var costUsd: Double
+    }
+
+    struct Periods: Codable {
+        var today: Period
+        var week: Period
+        var month: Period
+    }
+
+    struct Totals: Codable {
+        var tokens: Int
+        var input: Int
+        var output: Int
+        var cacheWrite: Int
+        var cacheRead: Int
+        var costUsd: Double
+    }
+
+    struct Day: Codable, Identifiable {
+        /// « 2026-10-07 »
+        var day: String
+        var tokens: Int
+        var costUsd: Double
+
+        var id: String { day }
+        var date: Date { PulseStats.dayFormatter.date(from: day) ?? .distantPast }
+    }
+
+    struct Model: Codable, Identifiable {
+        var model: String
+        var tokens: Int
+        var costUsd: Double
+        var id: String { model }
+    }
+
+    var since: String?
+    var totals: Totals
+    var periods: Periods
+    var days: [Day]
+    var models: [Model]
+    var sessions: Int
+
+    var sinceDate: Date? { since.flatMap { PulseStats.dayFormatter.date(from: $0) } }
+
+    static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+}

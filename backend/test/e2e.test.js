@@ -48,7 +48,8 @@ before(async () => {
     hook: (await import('../api/hook.js')).default,
     usage: (await import('../api/usage.js')).default,
     state: (await import('../api/state.js')).default,
-    test: (await import('../api/test.js')).default,
+    tokens: (await import('../api/tokens.js')).default,
+    stats: (await import('../api/stats.js')).default,
   };
 });
 after(() => redisServer.close());
@@ -118,15 +119,23 @@ test('une session déjà ouverte avant l’installation ne gonfle pas le coût d
   assert.equal((await call(api.state, 'GET')).data.today.costUsd, before + 1.5);
 });
 
-test('démo depuis l’app', async () => {
-  await call(api.test, 'POST', { step: 'start' });
-  let demo = (await call(api.state, 'GET')).data.sessions.find((s) => s.sid === 'demo');
-  assert.equal(demo.status, 'running');
-  assert.equal(demo.duration, '1 min');
-  await call(api.test, 'POST', { step: 'waiting' });
-  demo = (await call(api.state, 'GET')).data.sessions.find((s) => s.sid === 'demo');
-  assert.equal(demo.status, 'waiting');
-  await call(api.test, 'POST', { step: 'end' });
-  demo = (await call(api.state, 'GET')).data.sessions.find((s) => s.sid === 'demo');
-  assert.equal(demo.status, 'done');
+test('tokens envoyés par le Mac, puis statistiques', async () => {
+  const day = (await import('../lib/store.js')).day(Date.now());
+  const sessions = [
+    { sid: 'a', days: { [day]: { 'claude-opus-5-5': [1000, 2000, 0, 0, 1_000_000] } } },
+    { sid: 'b', days: { [day]: { 'claude-sonnet-4-5-20250929': [1_000_000, 0, 0, 0, 0] } } },
+  ];
+  assert.equal((await call(api.tokens, 'POST', { sessions })).status, 200);
+  // Renvoyer la même session ne compte pas double.
+  await call(api.tokens, 'POST', { sessions: [sessions[0]] });
+  const st = (await call(api.stats, 'GET')).data;
+  assert.equal(st.sessions, 2);
+  assert.equal(st.totals.tokens, 2_003_000);
+  // Opus 5.5 : 1000×4 + 2000×20 + 1 M×0,20 = 0,244 $ ; Sonnet 4.5 : 1 M×3 = 3 $
+  assert.equal(st.totals.costUsd, 3.24);
+  assert.equal(st.periods.today.costUsd, 3.24);
+  assert.equal(st.days.length, 30);
+  assert.equal(st.days.at(-1).day, day);
+  assert.deepEqual(st.models.map((m) => m.model), ['Sonnet 4.5', 'Opus 5.5']);
+  assert.equal((await call(api.tokens, 'POST', { sessions: [] })).status, 400);
 });

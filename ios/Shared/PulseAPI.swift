@@ -21,9 +21,10 @@ enum PulseAPI {
         return state
     }
 
-    /// Démo de bout en bout : step = "start", "waiting" ou "end".
-    static func sendTest(step: String) async throws {
-        _ = try await request("POST", "/api/test", body: ["step": step])
+    /// Tokens et équivalent en dollars au tarif de l'API (vue détaillée).
+    static func fetchStats() async throws -> PulseStats {
+        let data = try await request("GET", "/api/stats")
+        return try JSONDecoder().decode(PulseStats.self, from: data)
     }
 
     private static func request(_ method: String, _ path: String, body: [String: String]? = nil) async throws -> Data {
