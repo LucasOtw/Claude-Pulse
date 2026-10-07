@@ -18,6 +18,7 @@ final class SilentAudio {
         player?.play()
 
         // Après un appel ou une alarme, iOS met l'audio en pause : on relance.
+        guard observer == nil else { return }
         observer = NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
         ) { [weak self] note in

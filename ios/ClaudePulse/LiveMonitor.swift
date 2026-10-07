@@ -25,6 +25,7 @@ final class LiveMonitor: ObservableObject {
     private var knownStatus: [String: String] = [:]
     private var lastContent: PulseAttributes.ContentState?
     private var lastPushed = Date.distantPast
+    private var resuming = false
 
     // MARK: Démarrer / arrêter
 
@@ -66,6 +67,34 @@ final class LiveMonitor: ObservableObject {
         loop = Task { [weak self] in await self?.run() }
     }
 
+    /// À chaque retour au premier plan (et au lancement) : si une Live Activity est déjà affichée,
+    /// on la reprend et on la met à jour tout de suite. Sans ça, une app relancée par iOS ou Xcode
+    /// laissait l'activité figée sur « Plus de nouvelles ».
+    func resume() async {
+        guard !resuming else { return }
+        resuming = true
+        defer { resuming = false }
+        if isRunning {
+            keepAlive.start() // un appel ou une autre app a pu couper le son silencieux
+            await tick()
+            if loop == nil { loop = Task { [weak self] in await self?.run() } }
+            return
+        }
+        guard let existing = Activity<PulseAttributes>.activities.first(where: {
+            $0.activityState == .active || $0.activityState == .stale
+        }) else { return }
+        activity = existing
+        lastContent = existing.content.state
+        if knownStatus.isEmpty, let state {
+            state.sessions.forEach { knownStatus[$0.sid] = $0.status } // pas de notification pour l'existant
+        }
+        keepAlive.start()
+        isRunning = true
+        watchActivity()
+        await tick()
+        loop = Task { [weak self] in await self?.run() }
+    }
+
     /// Change l'apparence de la Live Activity en cours, sans attendre le prochain relevé.
     func setTheme(_ theme: PulseConfig.ActivityTheme) async {
         PulseConfig.activityTheme = theme
@@ -103,28 +132,33 @@ final class LiveMonitor: ObservableObject {
 
     private func run() async {
         while !Task.isCancelled {
-            var delay = idleInterval
-            do {
-                let fresh = try await PulseAPI.fetchState()
-                state = fresh
-                lastUpdate = Date()
-                lastError = nil
-                let changed = notifyTransitions(fresh)
-                if changed { WidgetCenter.shared.reloadAllTimelines() }
-                await push(Self.content(from: fresh))
-                if !fresh.activeSessions.isEmpty { delay = activeInterval }
-            } catch {
-                lastError = error.localizedDescription
-                delay = 15
-            }
+            let delay = await tick()
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        }
+    }
+
+    /// Un relevé : état du backend, notifications, Live Activity. Renvoie le délai avant le suivant.
+    @discardableResult
+    private func tick() async -> Double {
+        do {
+            let fresh = try await PulseAPI.fetchState()
+            state = fresh
+            lastUpdate = Date()
+            lastError = nil
+            if notifyTransitions(fresh) { WidgetCenter.shared.reloadAllTimelines() }
+            await push(Self.content(from: fresh))
+            return fresh.activeSessions.isEmpty ? idleInterval : activeInterval
+        } catch {
+            lastError = error.localizedDescription
+            return 15
         }
     }
 
     private func push(_ content: PulseAttributes.ContentState) async {
         guard let activity else { return }
         // Une mise à jour au moins par minute pour repousser la date de péremption.
-        guard content != lastContent || Date().timeIntervalSince(lastPushed) > 60 else { return }
+        let due = Date().timeIntervalSince(lastPushed) > 60 || activity.activityState == .stale
+        guard content != lastContent || due else { return }
         await activity.update(.init(state: content, staleDate: staleDate()))
         lastContent = content
         lastPushed = Date()

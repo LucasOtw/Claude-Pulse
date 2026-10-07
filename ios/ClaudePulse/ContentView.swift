@@ -31,7 +31,10 @@ struct ContentView: View {
                 statuses: statuses,
                 error: monitor.lastError
             ))
-            .task { await monitor.refresh() }
+            .task {
+                await monitor.resume()
+                if !monitor.isRunning { await monitor.refresh() }
+            }
             .onChange(of: scenePhase) { _, phase in onScenePhase(phase) }
             .modifier(HomeSheets(showSettings: $showSettings, showDetail: $showDetail, selected: $selected))
             .tint(PulseStyle.accent)
@@ -132,8 +135,10 @@ struct ContentView: View {
     }
 
     private func onScenePhase(_ phase: ScenePhase) {
-        if phase == .active && !monitor.isRunning {
-            Task { await monitor.refresh() }
+        guard phase == .active else { return }
+        Task {
+            await monitor.resume()
+            if !monitor.isRunning { await monitor.refresh() }
         }
     }
 }
