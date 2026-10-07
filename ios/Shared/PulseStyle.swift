@@ -4,21 +4,31 @@ import UIKit
 /// Identité visuelle commune à l'app, au widget et à la Live Activity.
 /// Toutes les couleurs suivent le thème clair / sombre du téléphone ; la Live Activity force le sombre.
 enum PulseStyle {
-    // MARK: Couleurs
+    // MARK: Couleurs (inspirées de l'app Claude : ivoire chaud, gris sable, orange pêche)
 
-    /// Orange Claude (un peu plus profond en clair pour rester lisible sur blanc)
-    static let accent = dynamic(0xC4623F, 0xD97757)
-    static let accentSoft = dynamic(0xE08E6B, 0xF6B08A)
+    /// Claude's Peach #DE7356
+    static let peach = Color(red: 222 / 255, green: 115 / 255, blue: 86 / 255)
+    /// Crail #C15F3C
+    static let crail = Color(red: 193 / 255, green: 95 / 255, blue: 60 / 255)
 
-    static let background = dynamic(0xF2F1EF, 0x0A0909)
-    static let card = dynamic(0xFFFFFF, 0x161515)
-    static let cardRaised = dynamic(0xF0EEEC, 0x232120)
-    static let stroke = dynamic(0x000000, 0xFFFFFF, lightAlpha: 0.06, darkAlpha: 0.08)
-    static let track = dynamic(0x000000, 0xFFFFFF, lightAlpha: 0.08, darkAlpha: 0.14)
+    /// Accent : Crail sur fond clair (plus lisible), pêche sur fond sombre.
+    static let accent = dynamic(0xC15F3C, 0xDE7356)
+    static let accentSoft = dynamic(0xDE7356, 0xE8927A)
 
-    static let textPrimary = dynamic(0x1A1817, 0xF5F3F1)
-    static let textSecondary = dynamic(0x6B6662, 0xA39E99)
-    static let textTertiary = dynamic(0x9B9590, 0x6E6965)
+    /// Fond de l'écran (ivoire / anthracite chaud)
+    static let background = dynamic(0xF8F7F3, 0x1F1E1C)
+    /// Groupes de lignes et cartes (gris sable)
+    static let card = dynamic(0xEFEDE7, 0x2B2A27)
+    static let cardRaised = dynamic(0xE5E2DA, 0x37352F)
+    /// Boutons ronds flottants
+    static let floating = dynamic(0xFFFFFF, 0x34322E)
+    static let stroke = dynamic(0x000000, 0xFFFFFF, lightAlpha: 0.06, darkAlpha: 0.07)
+    static let separator = dynamic(0x000000, 0xFFFFFF, lightAlpha: 0.08, darkAlpha: 0.08)
+    static let track = dynamic(0x000000, 0xFFFFFF, lightAlpha: 0.09, darkAlpha: 0.14)
+
+    static let textPrimary = dynamic(0x1F1E1C, 0xF4F2EC)
+    static let textSecondary = dynamic(0x6E6A62, 0xB3AEA4)
+    static let textTertiary = dynamic(0x9D988E, 0x7E796F)
 
     static let good = dynamic(0x2E9E5B, 0x5CD187)
     static let warn = dynamic(0xC98A10, 0xFAC24A)
