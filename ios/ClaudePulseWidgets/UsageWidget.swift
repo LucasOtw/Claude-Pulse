@@ -43,7 +43,7 @@ struct UsageWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "ClaudePulseUsage", provider: UsageProvider()) { entry in
             UsageWidgetView(entry: entry)
-                .containerBackground(.fill.tertiary, for: .widget)
+                .containerBackground(for: .widget) { PulseStyle.background }
         }
         .configurationDisplayName("Utilisation Claude")
         .description("Limites 5 h / 7 jours, coût du jour et sessions en cours.")
@@ -74,11 +74,13 @@ struct UsageWidgetView: View {
     private var small: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
-            LimitBar(title: "5 h", pct: fiveHour)
-            LimitBar(title: "7 j", pct: sevenDay)
+            WidgetLimit(title: "5 h", pct: fiveHour)
+            WidgetLimit(title: "7 j", pct: sevenDay)
             Spacer(minLength: 0)
             HStack {
-                Text(PulseStyle.cost(state?.today.costUsd ?? 0)).font(.headline.monospacedDigit())
+                Text(PulseStyle.cost(state?.today.costUsd ?? 0))
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(.white)
                 Spacer()
                 activeBadge
             }
@@ -89,8 +91,8 @@ struct UsageWidgetView: View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
                 header
-                LimitBar(title: "5 h", pct: fiveHour)
-                LimitBar(title: "7 j", pct: sevenDay)
+                WidgetLimit(title: "5 h", pct: fiveHour)
+                WidgetLimit(title: "7 j", pct: sevenDay)
                 Spacer(minLength: 0)
                 Text("Aujourd'hui \(PulseStyle.cost(state?.today.costUsd ?? 0))")
                     .font(.caption.monospacedDigit())
@@ -111,10 +113,10 @@ struct UsageWidgetView: View {
                                 .font(.caption.bold())
                                 .foregroundStyle(PulseStyle.color(for: session.status))
                                 .lineLimit(1)
-                            Text(session.activity).font(.caption2).lineLimit(1)
+                            Text(session.activity).font(.caption2).foregroundStyle(.white).lineLimit(1)
                             if session.stepsTotal > 0 {
                                 ProgressView(value: Double(session.stepsDone), total: Double(session.stepsTotal))
-                                    .tint(PulseStyle.color(for: session.status))
+                                    .tint(PulseStyle.accent)
                             }
                         }
                     }
@@ -127,8 +129,8 @@ struct UsageWidgetView: View {
 
     private var header: some View {
         HStack(spacing: 4) {
-            Image(systemName: "sparkle").foregroundStyle(PulseStyle.accent)
-            Text("Claude").font(.headline)
+            Image(systemName: "waveform.path.ecg").foregroundStyle(PulseStyle.accent)
+            Text("Claude").font(.system(.headline, design: .rounded)).foregroundStyle(.white)
             Spacer()
             if entry.error != nil {
                 Image(systemName: "wifi.exclamationmark").foregroundStyle(.secondary).font(.caption)
@@ -176,19 +178,20 @@ struct UsageWidgetView: View {
     }
 }
 
-struct LimitBar: View {
+struct WidgetLimit: View {
     let title: String
     let pct: Double?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(title).font(.caption).foregroundStyle(.secondary)
+                Text(title).font(.caption.weight(.semibold)).foregroundStyle(PulseStyle.textSecondary)
                 Spacer()
-                Text(pct.map { "\(Int($0.rounded())) %" } ?? "–").font(.caption.bold().monospacedDigit())
+                Text(pct.map { "\(Int($0.rounded())) %" } ?? "–")
+                    .font(.caption.bold().monospacedDigit())
+                    .foregroundStyle(pct.map { PulseStyle.gauge($0) } ?? PulseStyle.textTertiary)
             }
-            ProgressView(value: min(pct ?? 0, 100), total: 100)
-                .tint(PulseStyle.gauge(pct ?? 0))
+            LimitBar(pct: pct, height: 8)
         }
     }
 }

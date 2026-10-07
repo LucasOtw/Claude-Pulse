@@ -176,7 +176,10 @@ final class LiveMonitor: ObservableObject {
 
     static func content(from state: PulseState?) -> PulseAttributes.ContentState {
         let fiveHour = state?.limits.fiveHour.map { Int($0.pct.rounded()) } ?? -1
-        guard let state, let s = focus(state.sessions) else { return .idle(fiveHourPct: fiveHour) }
+        let resetsAt = state?.limits.fiveHour?.resetsAt ?? 0
+        guard let state, let s = focus(state.sessions) else {
+            return .idle(fiveHourPct: fiveHour, fiveHourResetsAt: resetsAt)
+        }
         return PulseAttributes.ContentState(
             project: s.project,
             status: s.status,
@@ -188,6 +191,7 @@ final class LiveMonitor: ObservableObject {
             workflow: s.workflow,
             costUsd: s.costUsd,
             fiveHourPct: fiveHour,
+            fiveHourResetsAt: resetsAt,
             startedAt: s.startedAt,
             duration: s.duration,
             otherActive: state.activeSessions.filter { $0.sid != s.sid }.count

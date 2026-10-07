@@ -17,6 +17,8 @@ struct PulseAttributes: ActivityAttributes {
         var costUsd: Double
         /// -1 si inconnu (pas d'abonnement Pro/Max ou pas encore de relevé)
         var fiveHourPct: Int
+        /// Remise à zéro de la limite 5 h, secondes Unix (0 si inconnue)
+        var fiveHourResetsAt: Double
         /// Début de la tâche, secondes Unix
         var startedAt: Double
         /// Durée figée, ex. « 12 min », affichée une fois la tâche finie
@@ -36,15 +38,20 @@ extension PulseAttributes.ContentState {
         stepsTotal > 0 ? Double(stepsDone) / Double(stepsTotal) : nil
     }
 
-    static func idle(fiveHourPct: Int = -1) -> Self {
+    var fiveHourResetDate: Date? {
+        fiveHourResetsAt > 0 ? Date(timeIntervalSince1970: fiveHourResetsAt) : nil
+    }
+
+    static func idle(fiveHourPct: Int = -1, fiveHourResetsAt: Double = 0) -> Self {
         Self(project: "Claude Code", status: "idle", activity: "En attente d'une tâche", currentStep: "",
              stepsDone: 0, stepsTotal: 0, agents: 0, workflow: "", costUsd: 0, fiveHourPct: fiveHourPct,
-             startedAt: Date().timeIntervalSince1970, duration: "", otherActive: 0)
+             fiveHourResetsAt: fiveHourResetsAt, startedAt: Date().timeIntervalSince1970, duration: "",
+             otherActive: 0)
     }
 
     static let preview = Self(
         project: "Studio_Granit", status: "running", activity: "Modifie des fichiers", currentStep: "Écriture des tests",
         stepsDone: 2, stepsTotal: 5, agents: 2, workflow: "", costUsd: 1.42, fiveHourPct: 23,
-        startedAt: Date().addingTimeInterval(-240).timeIntervalSince1970, duration: "4 min", otherActive: 1
+        fiveHourResetsAt: Date().addingTimeInterval(7200).timeIntervalSince1970, startedAt: Date().addingTimeInterval(-240).timeIntervalSince1970, duration: "4 min", otherActive: 1
     )
 }
