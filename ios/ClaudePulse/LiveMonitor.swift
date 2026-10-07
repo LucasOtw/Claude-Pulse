@@ -215,16 +215,18 @@ final class LiveMonitor: ObservableObject {
             guard local else { continue }
             switch s.status {
             case "waiting":
-                Notifier.send(title: "\(s.project) attend ta validation", body: s.activity)
+                Notifier.send(title: "\(s.project) · Accord nécessaire", body: "Claude attend ta réponse dans le terminal.")
             case "done", "error":
                 // Seulement pour une tâche qu'on a vue tourner et qui a duré plus de 30 s.
                 guard let previous, ["running", "waiting", "background"].contains(previous),
                       s.updatedAt - s.startedAt >= 30 else { continue }
                 if s.status == "done" {
-                    let summary = s.summary.map { "\($0)\n" } ?? ""
-                    Notifier.send(title: "\(s.project) : terminé ✅", body: "\(summary)En \(s.duration)")
+                    Notifier.send(
+                        title: "\(s.project) · Terminé en \(s.duration)",
+                        body: s.summary ?? "Claude a fini et attend ta prochaine demande."
+                    )
                 } else {
-                    Notifier.send(title: "\(s.project) : erreur", body: s.activity)
+                    Notifier.send(title: "\(s.project) · Arrêt sur erreur", body: "\(s.activity)\nRelance la tâche depuis le terminal.")
                 }
             default:
                 break
@@ -241,11 +243,15 @@ final class LiveMonitor: ObservableObject {
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: key) else { return }
         defaults.set(true, forKey: key)
-        Notifier.send(title: "Limite 5 h à \(Int(limit.pct.rounded())) %", body: "Remise à zéro à \(PulseStyle.clock(limit.resetDate)).")
+        let pct = Int(limit.pct.rounded())
+        Notifier.send(
+            title: "Limite de 5 h utilisée à \(pct) %",
+            body: "Il te reste \(max(0, 100 - pct)) % jusqu'à la remise à zéro à \(PulseStyle.clock(limit.resetDate))."
+        )
         Notifier.schedule(
             id: "reset-\(Int(limit.resetsAt))",
-            title: "Limite 5 h remise à zéro",
-            body: "Tu peux relancer Claude.",
+            title: "Limite de 5 h remise à zéro",
+            body: "Ta limite repart de zéro : tu peux relancer Claude Code.",
             at: limit.resetDate
         )
     }
@@ -259,7 +265,10 @@ final class LiveMonitor: ObservableObject {
             return
         }
         for a in pending where !knownApprovals.contains(a.id) {
-            Notifier.send(title: "\(a.project) : autoriser \(a.tool) ?", body: a.text)
+            Notifier.send(
+                title: "\(a.project) · Autoriser \(a.tool) ?",
+                body: a.text + (a.danger ? "\nCommande sensible : seul le Mac peut l'autoriser." : "\nRéponds depuis l'app ou la Live Activity.")
+            )
         }
     }
 

@@ -133,6 +133,7 @@ export function applyEvent(prev, ev, now) {
         if (Object.values(s.tasks ?? {}).every((t) => t.done)) s.tasks = {};
       }
       s.summary = null;
+      s.recap = null;
       log(s, now, 'Nouvelle demande');
       break;
 
@@ -214,6 +215,7 @@ export function applyEvent(prev, ev, now) {
         finishAgents(s, now);
       }
       if (ev.summary) s.summary = String(ev.summary).slice(0, 200);
+      if (ev.recap) s.recap = cleanRecap(ev.recap);
       log(s, now, s.activity);
       break;
     }
@@ -236,6 +238,13 @@ export function applyEvent(prev, ev, now) {
       s.updatedAt = prev?.updatedAt ?? now;
   }
   return s;
+}
+
+/** Ce que Claude a fait pendant le tour (calculé sur le Mac à partir du transcript). */
+function cleanRecap(r) {
+  const n = (v) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
+  const files = Array.isArray(r.files) ? r.files.filter((f) => typeof f === 'string' && f).slice(0, 8).map((f) => f.slice(0, 60)) : [];
+  return { files, fileCount: Math.max(n(r.fileCount), files.length), commands: n(r.commands), agents: n(r.agents) };
 }
 
 export function translateNotification(ev) {

@@ -53,6 +53,19 @@ echo "$stop" | "$HERE/hook.sh"
 [ "$(grep '"e":"Stop"' got.jsonl | tail -n 1 | cut -d' ' -f2- | jq -r .summary)" = "J’ai corrigé les tests du backend." ] || fail "résumé"
 ok "hook.sh : résumé seulement si activé, première phrase"
 
+cat > turn.jsonl <<'J'
+{"type":"user","message":{"role":"user","content":"ancienne demande"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/x/old.js"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"nouvelle demande"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/x/App/contact.html","old_string":"SECRET"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"1","content":"SECRET"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"SECRET"}},{"type":"tool_use","name":"Edit","input":{"file_path":"/x/App/contact.html"}},{"type":"tool_use","name":"Agent","input":{}}]}}
+J
+echo "{\"session_id\":\"s3\",\"cwd\":\"/x/App\",\"hook_event_name\":\"Stop\",\"transcript_path\":\"$WORK/turn.jsonl\"}" | "$HERE/hook.sh"
+[ "$(grep '"sid":"s3"' got.jsonl | grep '"e":"Stop"' | tail -n 1 | cut -d' ' -f2- | jq -c .recap)" = '{"files":["contact.html"],"fileCount":1,"commands":1,"agents":1}' ] || fail "récapitulatif du tour"
+grep '"sid":"s3"' got.jsonl | grep -q SECRET && fail "contenu envoyé dans le récapitulatif"
+ok "hook.sh : récapitulatif du dernier tour (noms de fichiers et nombres seulement)"
+
 # --- tokens.jq : dédoublonnage, cache 1 h, sous-agents ignorés ici
 cat > t.jsonl <<'J'
 {"type":"assistant","requestId":"r1","timestamp":"2026-10-07T08:00:05.123Z","cwd":"/x/App","message":{"id":"m1","model":"claude-opus-5-5","usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":1000,"cache_read_input_tokens":20000,"cache_creation":{"ephemeral_1h_input_tokens":1000}}}}

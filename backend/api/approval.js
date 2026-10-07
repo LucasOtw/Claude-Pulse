@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import { route } from '../lib/http.js';
 import { describe, isDangerous, APPROVAL_TTL } from '../lib/approval.js';
 import { notify } from '../lib/notify.js';
+import { approvalAlert } from '../lib/alerts.js';
 import * as store from '../lib/store.js';
 
 export default route(['GET', 'POST'], async (b, req, res) => {
@@ -36,11 +37,6 @@ export default route(['GET', 'POST'], async (b, req, res) => {
     decision: 'pending',
   };
   await store.createApproval(a, APPROVAL_TTL);
-  await notify({
-    title: `${a.project} : autoriser ${a.tool} ?`,
-    message: a.danger ? `${a.text}\n⚠️ Commande sensible : à valider sur le Mac` : `${a.text}\nRéponds dans Claude Pulse.`,
-    tags: ['raised_hand'],
-    priority: 5,
-  });
+  await notify(approvalAlert(a));
   res.status(200).json({ remote: true, id: a.id });
 });

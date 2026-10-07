@@ -188,16 +188,31 @@ test('ntfy : validation demandée, fin de tâche, limite 80 % et remise à zéro
   const sid = 'ntfy-1';
   await call(api.hook, 'POST', { e: 'UserPromptSubmit', sid, project: 'App' });
   await call(api.hook, 'POST', { e: 'Notification', sid, ntype: 'permission_prompt', message: 'Claude needs your permission to use Bash' });
-  assert.equal(notifications.at(-1).title, 'App attend ta validation');
+  assert.equal(notifications.at(-1).title, 'App · Accord nécessaire');
   assert.equal(notifications.at(-1).topic, 'pulse-test');
+  assert.equal(notifications.at(-1).click, 'claudepulse://', 'toucher ouvre Claude Pulse');
+  assert.equal(notifications.at(-1).tags, undefined, 'pas d’emoji');
 
   const resetsAt = Math.floor(Date.now() / 1000) + 3600;
   const reading = { sid, costUsd: 1, contextPct: 10, fiveHour: { pct: 82, resetsAt } };
   await call(api.usage, 'POST', reading);
   await call(api.usage, 'POST', { ...reading, fiveHour: { pct: 85, resetsAt } });
   const limit = notifications.filter((n) => n.title.startsWith('Limite'));
-  assert.deepEqual(limit.map((n) => n.title), ['Limite 5 h à 82 %', 'Limite 5 h remise à zéro']);
+  assert.deepEqual(limit.map((n) => n.title), ['Limite de 5 h utilisée à 82 %', 'Limite de 5 h remise à zéro']);
   assert.equal(limit[1].delay, String(resetsAt), 'remise à zéro programmée chez ntfy');
+
+  // Fin de tâche : le récapitulatif calculé sur le Mac arrive dans la notification.
+  const t0 = Date.now();
+  const realNow = Date.now;
+  Date.now = () => t0 + 5 * 60_000;
+  try {
+    await call(api.hook, 'POST', { e: 'Stop', sid, recap: { files: ['index.html'], fileCount: 1, commands: 3, agents: 0 } });
+  } finally {
+    Date.now = realNow;
+  }
+  const done = notifications.at(-1);
+  assert.match(done.title, /^App · Terminé en \d+ min$/);
+  assert.equal(done.message, '1 fichier modifié : index.html\n3 commandes');
 
   const st = (await call(api.state, 'GET')).data;
   assert.equal(st.ntfy, true);

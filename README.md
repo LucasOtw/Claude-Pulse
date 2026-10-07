@@ -96,6 +96,17 @@ Elle récupère la dernière version, met à jour les scripts Claude Code, rég�
 
 **Notifications même app fermée (ntfy, gratuit).** Installe l'app **ntfy** sur l'iPhone, choisis un nom de sujet impossible à deviner (`openssl rand -hex 12`), abonne-toi à ce sujet dans ntfy, puis ajoute `NTFY_TOPIC` avec ce nom dans les variables Vercel et redéploie. Le serveur envoie alors lui-même : validation demandée, tâche terminée, erreur, limite 5 h à 80 % et remise à zéro (programmée à l'avance chez ntfy). Elles arrivent aussi sur l'Apple Watch. L'app n'envoie plus ses propres notifications pour éviter les doublons.
 
+Exemple de notification de fin de tâche (sans emoji, toucher ouvre Claude Pulse) :
+
+```
+Studio_Granit · Terminé en 12 min
+J'ai corrigé le formulaire de contact.          ← seulement avec PULSE_SUMMARY=1
+3 fichiers modifiés : contact.html, style.css et main.js
+4 étapes sur 4 · 6 commandes · 1 sous-agent
+```
+
+Le récapitulatif (noms de fichiers et nombres, jamais leur contenu) est calculé sur le Mac à partir du transcript de la session.
+
 **Valider depuis l'iPhone.** Interrupteur « Valider depuis l'iPhone » dans l'app, à allumer quand tu t'éloignes du Mac. Quand Claude Code demande une autorisation, la demande s'affiche dans l'app et sur la Live Activity (boutons Autoriser / Refuser). Garde-fous :
 - éteint, rien ne change : le terminal pose sa question comme d'habitude ;
 - allumé, Claude attend ta réponse 3 minutes au plus, puis le terminal reprend la main ;

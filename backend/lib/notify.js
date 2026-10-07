@@ -7,12 +7,13 @@ const TOKEN = process.env.NTFY_TOKEN;
 export const ntfyEnabled = () => Boolean(TOPIC);
 
 /**
- * @param {{ title: string, message: string, tags?: string[], priority?: 1|2|3|4|5, delay?: number }} n
+ * @param {{ title: string, message: string, priority?: 1|2|3|4|5, delay?: number }} n
  *   delay : secondes Unix de livraison (ntfy accepte jusqu'à 3 jours d'avance)
  */
 export async function notify(n) {
   if (!TOPIC) return false;
-  const body = { topic: TOPIC, title: n.title, message: n.message, tags: n.tags ?? [], priority: n.priority ?? 3 };
+  // Toucher la notification ouvre Claude Pulse (schéma d'URL déclaré dans l'app iOS).
+  const body = { topic: TOPIC, title: n.title, message: n.message, priority: n.priority ?? 3, click: 'claudepulse://' };
   if (n.delay) body.delay = String(Math.floor(n.delay));
   try {
     const res = await fetch(URL_, {

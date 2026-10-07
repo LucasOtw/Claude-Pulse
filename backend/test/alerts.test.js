@@ -1,27 +1,62 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sessionAlert, limitAlerts } from '../lib/alerts.js';
+import { sessionAlert, limitAlerts, approvalAlert, fileList } from '../lib/alerts.js';
 import { isDangerous, describe } from '../lib/approval.js';
 import { buildStats } from '../lib/stats.js';
 
 const T = 1_700_000_000_000;
 const s = (status, extra = {}) => ({ project: 'App', status, activity: 'x', turnStartedAt: T, ...extra });
 
-test('alertes de session', () => {
-  assert.equal(sessionAlert(s('running'), s('waiting'), T + 5000).title, 'App attend ta validation');
+test('alertes de session : textes clairs, sans emoji', () => {
+  const ask = sessionAlert(s('running'), s('waiting', { activity: 'Veut utiliser Bash : à valider', todos: { done: 1, total: 3, current: 'Lance les tests' } }), T + 5000);
+  assert.equal(ask.title, 'App · Accord nécessaire');
+  assert.equal(ask.message, 'Claude veut exécuter une commande et attend ton accord dans le terminal.\nÉtape en cours : Lance les tests');
+  assert.equal(sessionAlert(s('running'), s('waiting', { activity: 'Attend ta réponse' }), T).title, 'App · Question en attente');
   assert.equal(sessionAlert(s('running'), s('done'), T + 10_000), null, 'tâche de moins de 30 s : rien');
-  const done = sessionAlert(s('running'), s('done', { summary: 'Tests corrigés.' }), T + 120_000);
-  assert.equal(done.title, 'App : terminé');
-  assert.equal(done.message, 'Tests corrigés.\nEn 2 min');
+
+  const done = sessionAlert(
+    s('running'),
+    s('done', {
+      summary: 'Tests corrigés.',
+      todos: { done: 4, total: 4, current: '' },
+      recap: { files: ['contact.html', 'style.css', 'main.js', 'a.js'], fileCount: 5, commands: 12, agents: 1 },
+    }),
+    T + 120_000,
+  );
+  assert.equal(done.title, 'App · Terminé en 2 min');
+  assert.equal(done.message, 'Tests corrigés.\n5 fichiers modifiés : contact.html, style.css, main.js et 2 autres\n4 étapes sur 4 · 12 commandes · 1 sous-agent');
+  assert.equal(sessionAlert(s('running'), s('done'), T + 120_000).message, 'Claude a fini et attend ta prochaine demande.');
+
+  const err = sessionAlert(s('running'), s('error', { error: 'rate_limit' }), T);
+  assert.equal(err.title, 'App · Arrêt sur erreur');
+  assert.match(err.message, /^Limite d'utilisation atteinte\./);
+
   assert.equal(sessionAlert(s('done'), s('done'), T + 120_000), null, 'pas de changement : rien');
   assert.equal(sessionAlert(null, s('done'), T + 120_000), null, 'jamais vue en cours : rien');
+  for (const a of [ask, done, err]) assert.equal(a.tags, undefined, 'pas de tags (emoji)');
+});
+
+test('liste de fichiers', () => {
+  assert.equal(fileList(['a.js'], 1), 'a.js');
+  assert.equal(fileList(['a.js', 'b.js'], 2), 'a.js et b.js');
+  assert.equal(fileList(['a.js', 'b.js', 'c.js'], 3), 'a.js, b.js et c.js');
+  assert.equal(fileList(['a.js', 'b.js', 'c.js', 'd.js'], 4), 'a.js, b.js, c.js et 1 autre');
+});
+
+test('alerte de validation à distance', () => {
+  const a = approvalAlert({ project: 'App', tool: 'Bash', text: 'npm test', note: 'Lance les tests', danger: false });
+  assert.equal(a.title, 'App · Autoriser : exécuter une commande ?');
+  assert.equal(a.message, 'npm test\nLance les tests\nRéponds depuis Claude Pulse ou la Live Activity.');
+  assert.match(approvalAlert({ project: 'App', tool: 'Bash', text: 'rm -rf x', danger: true }).message, /seul le Mac/);
 });
 
 test('alertes de limite : seulement au-delà de 80 %', () => {
   assert.deepEqual(limitAlerts({ pct: 79, resetsAt: 1 }), []);
   assert.deepEqual(limitAlerts(null), []);
-  const [hit, reset] = limitAlerts({ pct: 80, resetsAt: 1_800_000_000 });
+  const [hit, reset] = limitAlerts({ pct: 82, resetsAt: 1_800_000_000 }, 1_800_000_000_000 - 72 * 60_000);
   assert.equal(hit.key, 'alert:80:1800000000');
+  assert.equal(hit.title, 'Limite de 5 h utilisée à 82 %');
+  assert.match(hit.message, /^Il te reste 18 % jusqu'à la remise à zéro à \d\d:\d\d \(dans 1 h 12\)\.$/);
   assert.equal(reset.delay, 1_800_000_000);
 });
 

@@ -17,7 +17,7 @@ TOKEN="${2:-}"
 URL="${URL%/}"
 
 mkdir -p "$DIR"
-cp "$SRC/hook.sh" "$SRC/statusline.sh" "$SRC/tokens.sh" "$SRC/tokens.jq" "$SRC/backfill.sh" "$SRC/approve.sh" "$DIR/"
+cp "$SRC/hook.sh" "$SRC/statusline.sh" "$SRC/tokens.sh" "$SRC/tokens.jq" "$SRC/turn.jq" "$SRC/backfill.sh" "$SRC/approve.sh" "$DIR/"
 chmod +x "$DIR/hook.sh" "$DIR/statusline.sh" "$DIR/tokens.sh" "$DIR/backfill.sh" "$DIR/approve.sh"
 
 mkdir -p "$(dirname "$SETTINGS")"

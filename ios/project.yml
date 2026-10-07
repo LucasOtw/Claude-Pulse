@@ -39,6 +39,10 @@ targets:
         UIBackgroundModes: [audio, location]
         NSLocationWhenInUseUsageDescription: "Claude Pulse utilise la localisation uniquement pour rester active écran verrouillé et garder la Live Activity à jour. Ta position n'est ni enregistrée ni envoyée."
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # claudepulse:// : toucher une notification ntfy ouvre directement Claude Pulse.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.lucasotw.claudepulse
+            CFBundleURLSchemes: [claudepulse]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lucasotw.claudepulse

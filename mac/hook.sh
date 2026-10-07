@@ -37,7 +37,17 @@ if [ "$event" = "PreToolUse" ]; then
   esac
 fi
 
-payload=$(printf '%s' "$input" | jq -c --arg summary_on "${PULSE_SUMMARY:-0}" '
+transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty')
+transcript="${transcript/#\~/$HOME}"
+
+# Fin de tour : ce que Claude a fait (fichiers modifiés, commandes, sous-agents), pour la notification.
+recap=null
+if [ "$event" = "Stop" ] && [ -f "$transcript" ]; then
+  recap=$(tail -n 4000 "$transcript" | jq -R -n -c -f "$(dirname "$0")/turn.jq" 2>/dev/null) || recap=null
+  [ -n "$recap" ] || recap=null
+fi
+
+payload=$(printf '%s' "$input" | jq -c --arg summary_on "${PULSE_SUMMARY:-0}" --argjson recap "$recap" '
   def cut($n): if type == "string" then .[0:$n] else . end;
   def workflow:
     (.tool_input.script // "" | .[0:4000]) as $head
@@ -82,7 +92,8 @@ payload=$(printf '%s' "$input" | jq -c --arg summary_on "${PULSE_SUMMARY:-0}" '
         | gsub("```[\\s\\S]*?```"; " ") | gsub("[`*_#>|]"; "") | gsub("\\s+"; " ") | ltrimstr(" ")
         | if length == 0 then null
           else ((capture("^(?<s>.{12,180}?[.!?…])(\\s|$)") | .s) // .[0:160]) end)
-      else null end)
+      else null end),
+    recap: (if .hook_event_name == "Stop" then $recap else null end)
   }
   | with_entries(select(.value != null))' 2>/dev/null) || exit 0
 
@@ -93,8 +104,6 @@ curl -sS -m 8 -X POST "$PULSE_URL/api/hook" \
 
 # Fin de tour : on recompte les tokens de la session (vue détaillée de l'app).
 if [ "$event" = "Stop" ] || [ "$event" = "SessionEnd" ]; then
-  transcript=$(printf '%s' "$input" | jq -r '.transcript_path // empty')
-  transcript="${transcript/#\~/$HOME}"
   [ -n "$transcript" ] && "$(dirname "$0")/tokens.sh" "$transcript"
 fi
 exit 0
